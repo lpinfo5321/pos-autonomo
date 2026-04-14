@@ -55,6 +55,7 @@ model Modifier {
   price           Float         @default(0)
   calories        Int?
   image           String?
+  posCode         String?       // Código PLU en Cash Register Express
   modifierGroupId String
   modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
   active          Boolean       @default(true)
