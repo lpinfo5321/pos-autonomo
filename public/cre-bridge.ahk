@@ -1,11 +1,11 @@
 ; ============================================================
-;  BRIDGE v6: Kiosco → Cash Register Express
+;  BRIDGE v6: Kiosco -> Cash Register Express
 ;
 ;  USO:
-;  1. Ejecutar como Administrador (clic derecho → Run as admin)
-;  2. Escanear ticket del cliente en CRE → CRE muestra error
+;  1. Ejecutar como Administrador (clic derecho -> Run as admin)
+;  2. Escanear ticket del cliente en CRE -> CRE muestra error
 ;  3. Presionar Ctrl+Shift+O en el teclado
-;  4. Escribir el numero de orden → Enter
+;  4. Escribir el numero de orden -> Enter
 ;  5. El script agrega los productos automaticamente
 ; ============================================================
 #NoEnv
@@ -17,42 +17,75 @@ SetTitleMatchMode, 2
 
 API_BASE := "https://pos-app-taupe.vercel.app"
 
-TrayTip, Bridge CRE v6, Listo. Usa Ctrl+Shift+O para cargar una orden., 5
-
-; ── Monitorear dialogo de CRE (cierra automaticamente si aparece) 
 global busy     := false
 global lastScan := ""
+
+TrayTip, Bridge CRE v6, Listo. Usa Ctrl+Shift+O para cargar una orden., 5
+
 SetTimer, WatchDialog, 250
 return
 
-; ── Capturar scan del escaner ────────────────────────────────────
-~$0:: if !busy, lastScan .= "0"
-~$1:: if !busy, lastScan .= "1"
-~$2:: if !busy, lastScan .= "2"
-~$3:: if !busy, lastScan .= "3"
-~$4:: if !busy, lastScan .= "4"
-~$5:: if !busy, lastScan .= "5"
-~$6:: if !busy, lastScan .= "6"
-~$7:: if !busy, lastScan .= "7"
-~$8:: if !busy, lastScan .= "8"
-~$9:: if !busy, lastScan .= "9"
-~Enter:: lastScan := lastScan  ; solo mantener valor
+; ── Capturar digitos del escaner (pasan a CRE Y se guardan) ──────
+~$0::
+  if !busy
+    lastScan .= "0"
+  return
+~$1::
+  if !busy
+    lastScan .= "1"
+  return
+~$2::
+  if !busy
+    lastScan .= "2"
+  return
+~$3::
+  if !busy
+    lastScan .= "3"
+  return
+~$4::
+  if !busy
+    lastScan .= "4"
+  return
+~$5::
+  if !busy
+    lastScan .= "5"
+  return
+~$6::
+  if !busy
+    lastScan .= "6"
+  return
+~$7::
+  if !busy
+    lastScan .= "7"
+  return
+~$8::
+  if !busy
+    lastScan .= "8"
+  return
+~$9::
+  if !busy
+    lastScan .= "9"
+  return
+~Enter::
+  return
 
 ; ── ATAJO PRINCIPAL: Ctrl+Shift+O ────────────────────────────────
 ^+o::
-  if busy {
+  global busy, lastScan
+  if busy
+  {
     MsgBox, 64, Bridge, Espera, ya se esta procesando una orden.
     return
   }
   busy := true
-
-  ; Usar numero capturado del scan, o pedir manualmente
   orderNum := lastScan
   lastScan := ""
 
-  if (orderNum = "") {
+  if (orderNum = "")
+  {
     InputBox, orderNum, Cargar Orden en CRE, Numero de orden:,, 260, 120
-    if ErrorLevel {
+    if ErrorLevel
+    {
       busy := false
       return
     }
@@ -61,7 +94,7 @@ return
 
   if orderNum is not integer
   {
-    MsgBox, 48, Bridge, "%orderNum%" no es un numero de orden valido.
+    MsgBox, 48, Bridge, Numero de orden invalido.
     busy := false
     return
   }
@@ -69,8 +102,9 @@ return
   GoSub, ProcesarOrden
   return
 
-; ── Detectar dialogo de error de CRE y cerrarlo ──────────────────
+; ── Timer: detectar dialogo de CRE ───────────────────────────────
 WatchDialog:
+  global busy, lastScan
   if busy
     return
   IfWinExist, Item Not Found
@@ -84,9 +118,11 @@ WatchDialog:
     Send {Enter}
     Sleep, 400
 
-    if (orderNum = "") {
+    if (orderNum = "")
+    {
       InputBox, orderNum, Cargar Orden en CRE, Numero de orden (no se capturo del scan):,, 300, 120
-      if ErrorLevel {
+      if ErrorLevel
+      {
         busy := false
         return
       }
@@ -108,22 +144,27 @@ ProcesarOrden:
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
 
-  try {
+  try
+  {
     whr.Open("GET", url, false)
     whr.Send()
-  } catch e {
-    MsgBox, 48, Bridge CRE, Error de conexion:`n%e%`n`nVerifica que esta PC tenga internet.
+  }
+  catch e
+  {
+    MsgBox, 48, Bridge CRE, Error de conexion. Verifica internet en esta PC.
     busy := false
     return
   }
 
-  if (whr.Status = 404) {
-    MsgBox, 48, Bridge CRE, Orden #%orderNum% no encontrada.`nVerifica el numero de orden.
+  if (whr.Status = 404)
+  {
+    MsgBox, 48, Bridge CRE, Orden #%orderNum% no encontrada. Verifica el numero.
     busy := false
     return
   }
 
-  if (whr.Status != 200) {
+  if (whr.Status != 200)
+  {
     MsgBox, 48, Bridge CRE, Error del servidor: HTTP %whr.Status%
     busy := false
     return
@@ -131,13 +172,14 @@ ProcesarOrden:
 
   json := whr.ResponseText
 
-  if !RegExMatch(json, """plu"":""([^""]+)""") {
-    MsgBox, 64, Bridge CRE, La orden #%orderNum% no tiene PLU configurado.`n`nVe a Admin del kiosco > Menu, edita el producto y pon su codigo PLU de CRE.
+  if !RegExMatch(json, """plu"":""([^""]+)""")
+  {
+    MsgBox, 64, Bridge CRE, Orden #%orderNum% sin PLU.`nVe a Admin del kiosco > Menu y asigna el PLU del producto.
     busy := false
     return
   }
 
-  ; Cerrar cualquier dialogo pendiente
+  ; Cerrar dialogo pendiente si existe
   IfWinExist, Item Not Found
   {
     WinActivate, Item Not Found
@@ -146,9 +188,10 @@ ProcesarOrden:
     Sleep, 300
   }
 
-  ; Activar CRE
-  if !WinExist("Cash Register Express") {
-    MsgBox, 48, Bridge CRE, No se encontro la ventana de Cash Register Express.`nAsegurate de que CRE este abierto.
+  ; Verificar que CRE este abierto
+  IfWinNotExist, Cash Register Express
+  {
+    MsgBox, 48, Bridge CRE, No se encontro Cash Register Express. Asegurate de que este abierto.
     busy := false
     return
   }
@@ -159,7 +202,8 @@ ProcesarOrden:
   ; Escribir cada PLU
   count := 0
   pos   := 1
-  while RegExMatch(json, """plu"":""([^""]+)"",""qty"":(\d+)", m, pos) {
+  while RegExMatch(json, """plu"":""([^""]+)"",""qty"":(\d+)", m, pos)
+  {
     plu := m1
     qty := m2 + 0
     pos += StrLen(m)
