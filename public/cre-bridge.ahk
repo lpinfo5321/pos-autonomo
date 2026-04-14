@@ -156,21 +156,24 @@ ProcesarOrden:
     return
   }
 
-  if (whr.Status = 404)
+  httpStatus := whr.Status
+  httpBody   := whr.ResponseText
+
+  if (httpStatus = 404)
   {
     MsgBox, 48, Bridge CRE, Orden #%orderNum% no encontrada. Verifica el numero.
     busy := false
     return
   }
 
-  if (whr.Status != 200)
+  if (httpStatus != 200)
   {
-    MsgBox, 48, Bridge CRE, Error del servidor: HTTP %whr.Status%
+    MsgBox, 48, Bridge CRE, Error del servidor: HTTP %httpStatus%
     busy := false
     return
   }
 
-  json := whr.ResponseText
+  json := httpBody
 
   if !RegExMatch(json, """plu"":""([^""]+)""")
   {
