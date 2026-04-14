@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🍔 POS Restaurant App
 
-## Getting Started
+Sistema POS completo estilo Shake Shack, con panel de administración, carrito de compras animado e integración Square.
 
-First, run the development server:
+## 🚀 Cómo iniciar
 
 ```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Generar cliente Prisma
+npx prisma generate
+
+# 3. Crear base de datos y datos iniciales
+npx tsx prisma/seed.ts
+
+# 4. Iniciar servidor de desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre **http://localhost:3000**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔐 Acceso Admin
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- URL: http://localhost:3000/admin
+- Email: `admin@posapp.com`
+- Contraseña: `admin123`
 
-## Learn More
+## 💳 Integración con Square
 
-To learn more about Next.js, take a look at the following resources:
+1. Ve a https://developer.squareup.com
+2. Crea una aplicación
+3. Copia tu **Access Token** y **Location ID**
+4. En el admin → Configuración → ingresa tus credenciales Square
+5. Cambia el ambiente de "Sandbox" a "Producción" cuando estés listo
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📱 Compatible con
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- 📱 Android (Chrome, Samsung Browser)
+- 🍎 iPhone/iPad (Safari, Chrome)
+- 💻 Windows (Chrome, Firefox, Edge)
+- 📟 Tabletas
 
-## Deploy on Vercel
+## ✨ Características
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Kiosko**: Pantalla de ordenar estilo Shake Shack con animaciones
+- **Menú**: Categorías, productos con imágenes y personalización
+- **Carrito**: Agregar/quitar items, ver subtotal con impuestos
+- **Checkout**: Selección de método de pago (tarjeta, efectivo, móvil)
+- **Admin Dashboard**: Estadísticas, ventas, pedidos recientes
+- **Gestión de Menú**: Crear/editar/eliminar items, activar/desactivar
+- **Gestión de Categorías**: Con emojis e íconos
+- **Pedidos**: Ver y actualizar estados (pendiente → preparando → listo → completado)
+- **Configuración**: Square API, tasa de impuesto, nombre del restaurante
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🛠️ Tecnologías
+
+- **Next.js 16** (App Router)
+- **TypeScript**
+- **Tailwind CSS 4**
+- **Framer Motion** (animaciones)
+- **Prisma 7** + SQLite (base de datos)
+- **Zustand** (estado del carrito)
+- **Square SDK** (pagos)
+- **Lucide Icons**

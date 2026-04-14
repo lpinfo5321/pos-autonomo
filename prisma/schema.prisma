@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  icon      String?
+  sortOrder Int        @default(0)
+  active    Boolean    @default(true)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model MenuItem {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?
+  price          Float
+  image          String?
+  calories       Int?
+  posCode        String?         // Código PLU/UPC en Cash Register Express
+  categoryId     String
+  category       Category        @relation(fields: [categoryId], references: [id])
+  modifierGroups ModifierGroup[]
+  orderItems     OrderItem[]
+  active         Boolean         @default(true)
+  featured       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model ModifierGroup {
+  id         String     @id @default(cuid())
+  name       String
+  required   Boolean    @default(false)
+  multiSelect Boolean   @default(false)
+  minSelect  Int        @default(0)
+  maxSelect  Int        @default(1)
+  menuItemId String
+  menuItem   MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  modifiers  Modifier[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Modifier {
+  id              String        @id @default(cuid())
+  name            String
+  price           Float         @default(0)
+  calories        Int?
+  image           String?
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  Int         @unique
+  status       String      @default("pending")
+  subtotal     Float
+  tax          Float
+  total        Float
+  paymentMethod String?
+  squarePaymentId String?
+  customerName String?
+  notes        String?
+  items        OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
+  name         String
+  price        Float
+  quantity     Int
+  modifiers    String   @default("[]")
+  notes        String?
+  createdAt    DateTime @default(now())
+}
+
+model Settings {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         String
+  updatedAt     DateTime @updatedAt
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
