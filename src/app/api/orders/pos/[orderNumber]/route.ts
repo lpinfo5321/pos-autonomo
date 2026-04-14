@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Este endpoint es usado por el script AutoHotKey para obtener los PLU de CRE
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ orderNumber: string }> }
@@ -13,39 +12,33 @@ export async function GET(
       return NextResponse.json({ error: "Número inválido" }, { status: 400 });
     }
 
-    const order = await prisma.order.findUnique({
-      where: { orderNumber: num },
-      include: {
-        items: {
-          include: {
-            menuItem: { select: { posCode: true, name: true } },
-          },
-        },
-      },
-    });
+    const [order, kioskPluSetting] = await Promise.all([
+      prisma.order.findUnique({
+        where: { orderNumber: num },
+        include: { items: true },
+      }),
+      prisma.setting.findUnique({ where: { key: "cre_kiosk_plu" } }),
+    ]);
 
     if (!order) {
       return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
     }
 
-    // Construir lista de PLU codes para CRE
-    const posCodes: { plu: string; qty: number; name: string }[] = [];
-    for (const item of order.items) {
-      const plu = item.menuItem?.posCode;
-      if (plu) {
-        posCodes.push({ plu, qty: item.quantity, name: item.name });
-      }
-    }
+    const kioskPlu = kioskPluSetting?.value ?? "";
+
+    // Resumen de ítems para mostrar en logs / debug
+    const itemsSummary = order.items.map((i) => ({
+      name: i.name,
+      qty: i.quantity,
+      price: i.price,
+    }));
 
     return NextResponse.json({
       orderNumber: order.orderNumber,
       status: order.status,
       total: order.total,
-      items: posCodes,
-      // Si algún ítem no tiene PLU, lo reportamos
-      missing: order.items
-        .filter((i) => !i.menuItem?.posCode)
-        .map((i) => i.name),
+      kioskPlu,          // PLU único configurado en admin settings
+      items: itemsSummary,
     });
   } catch (err) {
     console.error(err);

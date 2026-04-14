@@ -15,6 +15,7 @@ interface SettingsData {
   logo_url: string;
   primary_color: string;
   kiosk_url: string;
+  cre_kiosk_plu: string;
 }
 
 export default function SettingsPage() {
@@ -29,6 +30,7 @@ export default function SettingsPage() {
     logo_url: "",
     primary_color: "#22c55e",
     kiosk_url: "",
+    cre_kiosk_plu: "",
   });
   const [detectingIp, setDetectingIp] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -307,10 +309,28 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Campo PLU del kiosco */}
+          <div>
+            <label className="block text-sm font-bold text-blue-900 mb-1">
+              PLU "KIOSKO" en CRE
+            </label>
+            <input
+              type="text"
+              value={settings.cre_kiosk_plu}
+              onChange={(e) => setSettings({ ...settings, cre_kiosk_plu: e.target.value })}
+              placeholder="Ej: 99999"
+              className="w-full border-2 border-blue-300 rounded-xl px-4 py-3 text-blue-900 font-bold text-lg focus:outline-none focus:border-blue-600"
+            />
+            <p className="text-xs text-blue-600 mt-1">
+              Crea en CRE un artículo llamado <strong>"KIOSKO"</strong> con precio $0.00 (precio abierto) y pon su PLU aquí.
+              El script usará ese único PLU para todas las órdenes del kiosco y ajustará el precio automáticamente.
+            </p>
+          </div>
+
           <div className="space-y-3 text-sm text-blue-800">
             <div className="flex gap-3">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
-              <p>Ve a <strong>Menú → editar cada ítem</strong> y escribe el <strong>código PLU</strong> que ese ítem tiene en tu CRE.</p>
+              <p>En CRE crea un artículo: Nombre <strong>"KIOSKO"</strong>, precio <strong>$0.00 (precio abierto)</strong>. Anota su PLU y ponlo arriba.</p>
             </div>
             <div className="flex gap-3">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
@@ -318,11 +338,11 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-3">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
-              <p>Descarga el script bridge, <strong>edita la línea API_BASE</strong> con la IP de esta PC, y ejecútalo.</p>
+              <p>Guarda los settings, descarga el script y ejecútalo como <strong>Administrador</strong> en la PC del cajero.</p>
             </div>
             <div className="flex gap-3">
               <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">4</span>
-              <p>Con CRE abierto en la pantalla de venta, <strong>escanea el código de barras</strong> del ticket del cliente → todos los ítems se agregan solos.</p>
+              <p>Escanea el ticket del cliente en CRE → aparece <strong>"KIOSKO $XX.XX"</strong> listo para cobrar.</p>
             </div>
           </div>
 
