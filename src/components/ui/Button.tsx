@@ -1,12 +1,13 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { ButtonHTMLAttributes, forwardRef } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "ghost" | "outline";
   size?: "sm" | "md" | "lg" | "xl";
   loading?: boolean;
+  children?: ReactNode;
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -36,7 +37,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         whileHover={{ scale: disabled || loading ? 1 : 1.02 }}
         className={cn(base, variants[variant], sizes[size], disabled || loading ? "opacity-50 cursor-not-allowed" : "cursor-pointer", className)}
         disabled={disabled || loading}
-        {...(props as React.HTMLAttributes<HTMLButtonElement>)}
+        {...(props as object)}
       >
         {loading && (
           <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
