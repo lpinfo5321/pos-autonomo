@@ -1,110 +1,117 @@
 ; ============================================================
-;  BRIDGE: Kiosco Autónomo  ↔  Cash Register Express (CRE)
-;  Versión 2.0 - Detección inteligente escáner vs teclado
-;
-;  INSTRUCCIONES:
-;  1. AutoHotKey v1 debe estar instalado
-;  2. Haz doble clic en este archivo - verás un H verde en la barra de tareas
-;  3. Abre CRE en la pantalla de venta ("Scan Barcode Now...")
-;  4. Escanea el código de barras del ticket del cliente
+;  BRIDGE v3: Kiosco  →  Cash Register Express
 ; ============================================================
-
 #NoEnv
 #SingleInstance Force
 SetBatchLines -1
-SetKeyDelay, 60, 30
 
-; ── CONFIGURACIÓN ─────────────────────────────────────────
-API_BASE      := "https://pos-app-taupe.vercel.app"
-SCAN_MAX_MS   := 40   ; Escáner: menos de 40ms entre teclas
-SCAN_TIMEOUT  := 300  ; Si pasan 300ms sin Enter, cancelar captura
-; ──────────────────────────────────────────────────────────
+API_BASE := "https://pos-app-taupe.vercel.app"
+SPEED_MS := 50   ; ms maximo entre teclas del escaner
 
-global buffer   := ""
-global lastKey  := 0
-global isScanning := false
+global buf   := ""
+global lastT := 0
 
-; ── Captura de dígitos ────────────────────────────────────
-; Sin ~ → los dígitos NO se pasan a CRE automáticamente
-; El script decide si pasarlos (teclado humano) o capturarlos (escáner)
+TrayTip, Bridge CRE v3, Script activo - listo para escanear., 3
 
-$0:: HandleDigit("0")
-$1:: HandleDigit("1")
-$2:: HandleDigit("2")
-$3:: HandleDigit("3")
-$4:: HandleDigit("4")
-$5:: HandleDigit("5")
-$6:: HandleDigit("6")
-$7:: HandleDigit("7")
-$8:: HandleDigit("8")
-$9:: HandleDigit("9")
+; ── Todos los digitos (sin ~ = NO pasan a CRE automaticamente) ──
+$0:: Digit("0")
+$1:: Digit("1")
+$2:: Digit("2")
+$3:: Digit("3")
+$4:: Digit("4")
+$5:: Digit("5")
+$6:: Digit("6")
+$7:: Digit("7")
+$8:: Digit("8")
+$9:: Digit("9")
 
-HandleDigit(d) {
-  global buffer, lastKey, isScanning, SCAN_MAX_MS
+Digit(d) {
+  global buf, lastT, SPEED_MS
   now := A_TickCount
-  gap := now - lastKey
+  gap := now - lastT
+  lastT := now
 
-  if (gap < SCAN_MAX_MS || (isScanning && buffer != "")) {
-    ; Velocidad de escáner → capturar
-    buffer    .= d
-    lastKey   := now
-    isScanning := true
+  if (gap < SPEED_MS || buf != "") {
+    ; Velocidad de escaner → acumular sin pasar a CRE
+    buf .= d
   } else {
-    ; Velocidad humana → pasar a CRE normalmente
-    buffer     := d
-    lastKey    := now
-    isScanning := false
+    ; Primer digito lento (humano) → pasar a CRE y empezar buffer
+    buf := d
     SendInput % d
   }
 }
 
-; ── Enter: decide si es fin de escaneo o tecla normal ─────
+; ── Enter ────────────────────────────────────────────────────────
 $Enter::
-  global buffer, lastKey, isScanning, SCAN_MAX_MS, SCAN_TIMEOUT
+  global buf, lastT, SPEED_MS, API_BASE
   now := A_TickCount
-  gap := now - lastKey
+  gap := now - lastT
 
-  if (isScanning && buffer != "" && gap < SCAN_TIMEOUT) {
-    orderNum   := buffer
-    buffer     := ""
-    isScanning := false
+  ; Si el Enter llego rapido y hay buffer = fin de escaneo
+  if (buf != "" && gap < 500) {
+    orderNum := buf
+    buf      := ""
 
     if orderNum is integer
     {
-      GoSub, LoadOrderInCRE
-      return   ; NO enviar Enter a CRE — el script maneja todo
+      GoSub, DoOrder
+      return
     }
   }
 
-  ; No era escaneo → Enter normal
-  buffer     := ""
-  isScanning := false
+  ; Enter normal
+  buf := ""
   SendInput {Enter}
   return
 
-; ── Consulta la API y teclea los PLU en CRE ───────────────
-LoadOrderInCRE:
+; ── Procesar la orden ────────────────────────────────────────────
+DoOrder:
+  ; Esperar y cerrar cualquier dialogo "Item Not Found" que CRE abra
+  ; (puede aparecer si el primer digito llego a CRE antes de ser bloqueado)
+  Sleep, 400
+  Loop, 5 {
+    IfWinExist, Item Not Found
+    {
+      WinActivate, Item Not Found
+      Sleep, 150
+      Send {Enter}
+      Sleep, 250
+      break
+    }
+    Sleep, 100
+  }
+
+  ; Consultar API
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
-  whr.Open("GET", url, false)
-
   try {
+    whr.Open("GET", url, false)
     whr.Send()
-  } catch e {
-    MsgBox, 48, Bridge CRE, No se pudo conectar al kiosco.`nVerifica tu conexión a internet.
+  } catch {
+    MsgBox, 48, Bridge CRE, Sin conexion al servidor.
     return
   }
 
+  if (whr.Status = 404) {
+    MsgBox, 48, Bridge CRE, Orden #%orderNum% no encontrada.
+    return
+  }
   if (whr.Status != 200) {
-    MsgBox, 48, Bridge CRE, No se encontró la orden #%orderNum%
+    MsgBox, 48, Bridge CRE, Error del servidor (%whr.Status%).
     return
   }
 
   json := whr.ResponseText
-  itemsFound := 0
 
-  ; Parsear cada ítem: {"plu":"123456789","qty":2,"name":"..."}
-  pos := 1
+  ; Verificar PLU
+  if !RegExMatch(json, """plu"":""([^""]+)""") {
+    MsgBox, 64, Bridge CRE, Orden #%orderNum% sin PLU.`n`nAsigna los codigos PLU en Admin del kiosco.
+    return
+  }
+
+  ; Escribir cada PLU en CRE
+  count := 0
+  pos   := 1
   while RegExMatch(json, """plu"":""([^""]+)"",""qty"":(\d+)", m, pos) {
     plu := m1
     qty := m2 + 0
@@ -112,21 +119,25 @@ LoadOrderInCRE:
 
     Loop, %qty%
     {
+      Sleep, 300
+      ; Cerrar error si hay uno abierto
+      IfWinExist, Item Not Found
+      {
+        WinActivate, Item Not Found
+        Sleep, 100
+        Send {Enter}
+        Sleep, 200
+      }
+      ; Activar ventana de CRE y escribir PLU
+      WinActivate, Cash Register Express
       Sleep, 150
       SendInput % plu
-      Sleep, 80
+      Sleep, 100
       SendInput {Enter}
-      Sleep, 400   ; Esperar que CRE procese el ítem
+      Sleep, 600
     }
-    itemsFound++
+    count++
   }
 
-  ; Revisar ítems sin PLU
-  hasMissing := RegExMatch(json, """missing"":\[""[^""]+""")
-
-  if (itemsFound = 0 && !hasMissing) {
-    MsgBox, 48, Bridge CRE, La orden #%orderNum% no tiene códigos PLU configurados.`n`nAsigna los PLU en Admin → Menú del kiosco.
-  } else if (hasMissing) {
-    MsgBox, 64, Bridge CRE, Orden #%orderNum% cargada (%itemsFound% ítem/s).`n`n⚠ Algunos ítems no tienen PLU - agrégalos manualmente.
-  }
+  TrayTip, Exito, Orden #%orderNum% - %count% producto(s) en CRE., 2
   return
