@@ -1,10 +1,10 @@
 ; ============================================================
-;  BRIDGE v7: Kiosco -> Cash Register Express
+;  BRIDGE v8: Kiosco -> Cash Register Express
 ;
-;  TOTALMENTE AUTOMATICO - sin teclas ni pantalla tactil
-;
+;  TOTALMENTE AUTOMATICO:
 ;  1. Ejecutar como Administrador (clic derecho -> Run as admin)
-;  2. Escanear ticket del cliente en CRE -> se agrega solo
+;  2. Escanear el ticket del cliente en CRE
+;  3. El script cierra el error y agrega los productos solo
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -13,93 +13,96 @@
 SetBatchLines -1
 SetTitleMatchMode, 2
 
-API_BASE        := "https://pos-app-taupe.vercel.app"
+API_BASE := "https://pos-app-taupe.vercel.app"
 
-global busy          := false
-global lastScanField := ""   ; ultimo valor visto en el campo de CRE
-global lastProcessed := ""   ; ultima orden procesada (evita duplicados)
+global busy              := false
+global lastScanField     := ""
+global capturedOrderNum  := ""   ; numero capturado antes del dialogo
+global lastProcessed     := ""
 global lastProcessedTime := 0
 
-TrayTip, Bridge CRE v7, Activo. Escanea el ticket del cliente., 5
+TrayTip, Bridge CRE v8, Activo. Escanea el ticket del cliente., 5
 
-; ── Leer campo de escaneo de CRE cada 20ms ──────────────────────
-SetTimer, ReadScanField, 20
-
-; ── Detectar dialogo de error cada 200ms ────────────────────────
-SetTimer, WatchDialog, 200
-
+SetTimer, ReadScanField, 30
+SetTimer, WatchDialog,   150
 return
 
-; ── Leer continuamente el campo "Scan Barcode Now..." de CRE ────
+; ── Leer campo de escaneo de CRE ────────────────────────────────
 ReadScanField:
-  global busy, lastScanField
+  global busy, lastScanField, capturedOrderNum
   if busy
     return
   IfWinExist, Cash Register Express
   {
-    ControlGetText, fieldVal, Edit1, Cash Register Express
-    fieldVal := Trim(fieldVal)
-    if (fieldVal != "" && fieldVal != lastScanField)
-      lastScanField := fieldVal
+    ControlGetText, fv, Edit1, Cash Register Express
+    fv := Trim(fv)
+    if (fv != "" && fv != lastScanField)
+    {
+      lastScanField := fv
+      ; Guardar si parece un numero de orden (maximo 6 digitos)
+      if fv is integer
+      {
+        if (StrLen(fv) <= 6)
+          capturedOrderNum := fv
+      }
+    }
   }
   return
 
-; ── Detectar dialogo "Item Not Found" y procesar ────────────────
+; ── Detectar dialogo de CRE y procesar ──────────────────────────
 WatchDialog:
-  global busy, lastScanField, lastProcessed, lastProcessedTime
+  global busy, lastScanField, capturedOrderNum
+  global lastProcessed, lastProcessedTime
   if busy
     return
 
   IfWinExist, Item Not Found
   {
     busy := true
+    SetTimer, ReadScanField, Off   ; pausar lectura durante proceso
 
-    ; Intentar leer el campo de CRE en este momento tambien (por si acaso)
-    ControlGetText, liveVal, Edit1, Cash Register Express
-    liveVal := Trim(liveVal)
-    if (liveVal != "")
-      lastScanField := liveVal
+    ; Usar el numero capturado (corto = orden), no el PLU
+    orderNum := capturedOrderNum
+    capturedOrderNum := ""
+    lastScanField    := ""
 
-    ; Capturar orden del campo de CRE
-    orderNum := lastScanField
-    lastScanField := ""
-
-    ; Validar que sea un numero de orden
+    ; Validar
     if orderNum is not integer
     {
-      ; Cerrar el dialogo y salir
       WinActivate, Item Not Found
       Sleep, 150
       Send {Enter}
+      SetTimer, ReadScanField, 30
       busy := false
       return
     }
 
-    ; Evitar procesar la misma orden dos veces seguidas (en menos de 8s)
+    ; Anti-duplicado: misma orden en menos de 15 segundos = ignorar
     now := A_TickCount
-    if (orderNum = lastProcessed && (now - lastProcessedTime) < 8000)
+    if (orderNum = lastProcessed && (now - lastProcessedTime) < 15000)
     {
       WinActivate, Item Not Found
       Sleep, 150
       Send {Enter}
+      SetTimer, ReadScanField, 30
       busy := false
       return
     }
 
-    ; Cerrar el dialogo
+    lastProcessed     := orderNum
+    lastProcessedTime := A_TickCount
+
+    ; Cerrar el dialogo de CRE
     WinActivate, Item Not Found
     Sleep, 200
     Send {Enter}
     Sleep, 500
 
-    lastProcessed     := orderNum
-    lastProcessedTime := A_TickCount
-
     GoSub, ProcesarOrden
   }
   return
 
-; ── Consultar API y escribir PLU en CRE ─────────────────────────
+; ── Consultar API y tipear PLU en CRE ───────────────────────────
 ProcesarOrden:
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -111,7 +114,8 @@ ProcesarOrden:
   }
   catch e
   {
-    TrayTip, Bridge CRE, Error de conexion. Verifica internet., 4
+    TrayTip, Bridge CRE, Sin conexion a internet., 4
+    SetTimer, ReadScanField, 30
     busy := false
     return
   }
@@ -121,14 +125,16 @@ ProcesarOrden:
 
   if (httpStatus = 404)
   {
-    TrayTip, Bridge CRE, Orden #%orderNum% no encontrada., 4
+    TrayTip, Bridge CRE, Orden #%orderNum% no existe en el kiosco., 5
+    SetTimer, ReadScanField, 30
     busy := false
     return
   }
 
   if (httpStatus != 200)
   {
-    TrayTip, Bridge CRE, Error servidor: %httpStatus%, 4
+    TrayTip, Bridge CRE, Error servidor %httpStatus%, 4
+    SetTimer, ReadScanField, 30
     busy := false
     return
   }
@@ -137,12 +143,13 @@ ProcesarOrden:
 
   if !RegExMatch(json, """plu"":""([^""]+)""")
   {
-    TrayTip, Bridge CRE, Orden #%orderNum% sin PLU configurado., 5
+    TrayTip, Bridge CRE, Orden #%orderNum% sin PLU. Ve al Admin del kiosco., 5
+    SetTimer, ReadScanField, 30
     busy := false
     return
   }
 
-  ; Cerrar dialogo pendiente
+  ; Cerrar dialogo pendiente si existe
   IfWinExist, Item Not Found
   {
     WinActivate, Item Not Found
@@ -151,10 +158,10 @@ ProcesarOrden:
     Sleep, 300
   }
 
-  ; Verificar que CRE este abierto
   IfWinNotExist, Cash Register Express
   {
-    TrayTip, Bridge CRE, No se encontro Cash Register Express., 4
+    TrayTip, Bridge CRE, No se encontro CRE., 4
+    SetTimer, ReadScanField, 30
     busy := false
     return
   }
@@ -162,18 +169,19 @@ ProcesarOrden:
   WinActivate, Cash Register Express
   Sleep, 400
 
-  ; Escribir cada PLU en CRE
+  ; Escribir cada PLU (una sola vez por la cantidad indicada en la orden)
   count := 0
   pos   := 1
-  while RegExMatch(json, """plu"":""([^""]+)"",""qty"":(\d+)", m, pos)
+  while (matchPos := RegExMatch(json, """plu"":""([^""]+)"",""qty"":(\d+)", m, pos))
   {
     plu := m1
     qty := m2 + 0
-    pos += StrLen(m)
+    pos := matchPos + StrLen(m)   ; avanzar correctamente
 
     Loop, %qty%
     {
-      Sleep, 150
+      Sleep, 200
+      ; Cerrar error si CRE abre uno
       IfWinExist, Item Not Found
       {
         WinActivate, Item Not Found
@@ -182,15 +190,21 @@ ProcesarOrden:
         Sleep, 300
       }
       WinActivate, Cash Register Express
-      Sleep, 250
+      Sleep, 300
       SendInput % plu
-      Sleep, 80
+      Sleep, 100
       SendInput {Enter}
-      Sleep, 800
+      Sleep, 900
     }
     count++
   }
 
-  TrayTip, Orden lista, #%orderNum% - %count% producto(s) en CRE., 4
+  TrayTip, Listo, Orden #%orderNum% - %count% producto(s) en CRE., 4
+
+  ; Reactivar lectura de campo (con delay para que CRE limpie el campo)
+  Sleep, 2000
+  lastScanField    := ""
+  capturedOrderNum := ""
+  SetTimer, ReadScanField, 30
   busy := false
   return
