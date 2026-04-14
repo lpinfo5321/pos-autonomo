@@ -38,6 +38,7 @@ ReadScanField:
   global busy, lastScanField, capturedOrderNum
   if busy
     return
+  SetTitleMatchMode, 2
   IfWinExist, Cash Register Express
   {
     ControlGetText, fv, Edit1, Cash Register Express
@@ -58,6 +59,7 @@ ReadScanField:
 WatchDialog:
   global busy, capturedOrderNum, lastScanField
   global lastProcessed, lastProcessedTime
+  SetTitleMatchMode, 2   ; CRITICO: los timers usan modo 1 por defecto
   if busy
     return
 
@@ -105,6 +107,7 @@ WatchDialog:
 
 ; ── Consultar kiosco y escribir PLU + precio en CRE ─────────────
 ProcesarOrden:
+  SetTitleMatchMode, 2
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
 
