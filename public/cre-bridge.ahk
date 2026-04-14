@@ -22,8 +22,8 @@ global lastProcessedTime := 0
 
 TrayTip, Bridge CRE v7, Activo. Escanea el ticket del cliente., 5
 
-; ── Leer campo de escaneo de CRE cada 50ms ──────────────────────
-SetTimer, ReadScanField, 50
+; ── Leer campo de escaneo de CRE cada 20ms ──────────────────────
+SetTimer, ReadScanField, 20
 
 ; ── Detectar dialogo de error cada 200ms ────────────────────────
 SetTimer, WatchDialog, 200
@@ -53,6 +53,12 @@ WatchDialog:
   IfWinExist, Item Not Found
   {
     busy := true
+
+    ; Intentar leer el campo de CRE en este momento tambien (por si acaso)
+    ControlGetText, liveVal, Edit1, Cash Register Express
+    liveVal := Trim(liveVal)
+    if (liveVal != "")
+      lastScanField := liveVal
 
     ; Capturar orden del campo de CRE
     orderNum := lastScanField
