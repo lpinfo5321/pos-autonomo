@@ -3,9 +3,9 @@
 ;
 ;  ESTRATEGIA:
 ;  - Deja que el escaner mande el numero de orden a CRE
-;  - CRE mostrara "Item Not Found" (el numero de orden no es PLU)
-;  - Este script detecta ese dialogo cada 200ms
-;  - Lo cierra, consulta el kiosco y escribe el PLU correcto
+;  - CRE mostrara "Item Not Found"
+;  - Este script detecta ese dialogo, lo cierra,
+;    consulta el kiosco y escribe el PLU correcto
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -20,28 +20,61 @@ global busy     := false
 
 TrayTip, Bridge CRE v4, Activo - escanea el ticket del cliente., 3
 
-; Monitorear el dialogo de error cada 200ms
 SetTimer, WatchCREDialog, 200
 return
 
-; ── Capturar digitos del escaner (pasan a CRE Y se guardan aqui) ─
-~$*0:: if !busy, lastScan .= "0"
-~$*1:: if !busy, lastScan .= "1"
-~$*2:: if !busy, lastScan .= "2"
-~$*3:: if !busy, lastScan .= "3"
-~$*4:: if !busy, lastScan .= "4"
-~$*5:: if !busy, lastScan .= "5"
-~$*6:: if !busy, lastScan .= "6"
-~$*7:: if !busy, lastScan .= "7"
-~$*8:: if !busy, lastScan .= "8"
-~$*9:: if !busy, lastScan .= "9"
+; ── Capturar digitos (pasan a CRE Y se guardan aqui) ────────────
+~$*0::
+  if !busy
+    lastScan .= "0"
+  return
+
+~$*1::
+  if !busy
+    lastScan .= "1"
+  return
+
+~$*2::
+  if !busy
+    lastScan .= "2"
+  return
+
+~$*3::
+  if !busy
+    lastScan .= "3"
+  return
+
+~$*4::
+  if !busy
+    lastScan .= "4"
+  return
+
+~$*5::
+  if !busy
+    lastScan .= "5"
+  return
+
+~$*6::
+  if !busy
+    lastScan .= "6"
+  return
+
+~$*7::
+  if !busy
+    lastScan .= "7"
+  return
+
+~$*8::
+  if !busy
+    lastScan .= "8"
+  return
+
+~$*9::
+  if !busy
+    lastScan .= "9"
+  return
 
 ~$*Enter::
-  global lastScan, busy
-  if busy
-    return
-  ; Limpiar buffer al recibir Enter (CRE procesara lo que tenia)
-  ; lastScan queda con el ultimo numero escaneado hasta que el dialogo aparezca
   return
 
 ; ── Timer: detectar el dialogo de CRE y procesar ────────────────
@@ -63,7 +96,7 @@ WatchCREDialog:
     Send {Enter}
     Sleep, 400
 
-    ; Validar que sea un numero de orden
+    ; Validar numero de orden
     if (orderNum = "") {
       busy := false
       return
@@ -95,7 +128,7 @@ WatchCREDialog:
     json := whr.ResponseText
 
     if !RegExMatch(json, """plu"":""([^""]+)""") {
-      MsgBox, 64, Bridge CRE, Orden #%orderNum% sin PLU configurado.`n`nAdmin del kiosco → Menu → edita el producto y pon el PLU.
+      MsgBox, 64, Bridge CRE, Orden #%orderNum% sin PLU configurado.`n`nAdmin del kiosco > Menu > edita el producto y pon el PLU.
       busy := false
       return
     }
@@ -111,7 +144,7 @@ WatchCREDialog:
       Loop, %qty%
       {
         Sleep, 100
-        ; Cerrar cualquier dialogo pendiente
+        ; Cerrar dialogo si sigue abierto
         IfWinExist, Item Not Found
         {
           WinActivate, Item Not Found
