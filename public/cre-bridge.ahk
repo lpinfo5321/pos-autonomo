@@ -18,7 +18,7 @@ SetKeyDelay, 80, 50
 
 ; ── CONFIGURACIÓN ────────────────────────────────────────────
 ; Cambia esta URL a la IP de la PC donde corre el kiosco
-API_BASE := "http://192.168.10.130:3000"
+API_BASE := "https://pos-app-taupe.vercel.app"
 
 ; Intervalo máximo (ms) entre teclas para considerarse escáner
 SCANNER_SPEED := 60
