@@ -107,80 +107,62 @@ export default function SettingsPage() {
 
       <div className="space-y-5">
         {/* General */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h2 className="font-bold text-gray-900 mb-4">🏪 General</h2>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
+          <h2 className="font-black text-gray-900 text-base mb-4 flex items-center gap-2">🏪 General</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Nombre del restaurante
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">Nombre del restaurante</label>
               <input
                 type="text"
                 value={settings.restaurant_name}
                 onChange={(e) => update("restaurant_name", e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
                 placeholder="Mi Restaurante"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Mensaje de bienvenida
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">Mensaje de bienvenida</label>
               <input
                 type="text"
                 value={settings.welcome_message}
                 onChange={(e) => update("welcome_message", e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
                 placeholder="¡Bienvenido! Toca para ordenar"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                URL del logo
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">URL del logo</label>
               <input
                 type="url"
                 value={settings.logo_url}
                 onChange={(e) => update("logo_url", e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
                 placeholder="https://..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                URL del kiosco <span className="text-gray-400 font-normal">(para el QR de seguimiento)</span>
+              <label className="block text-sm font-bold text-gray-900 mb-1">
+                URL del kiosco
+                <span className="ml-2 text-xs font-normal text-gray-500">para el QR de seguimiento de órdenes</span>
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={settings.kiosk_url}
-                  onChange={(e) => update("kiosk_url", e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
-                  placeholder="http://192.168.1.100:3000"
-                />
-                <button
-                  type="button"
-                  onClick={autoDetectIp}
-                  disabled={detectingIp}
-                  className="flex items-center gap-1.5 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold rounded-xl border border-blue-200 transition-colors disabled:opacity-50 whitespace-nowrap"
-                >
-                  <Wifi className="w-4 h-4" />
-                  {detectingIp ? "Detectando..." : "Auto-detectar"}
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                La IP de red que los celulares usarán para escanear el QR. Haz click en &quot;Auto-detectar&quot; para obtenerla automáticamente.
+              <input
+                type="url"
+                value={settings.kiosk_url}
+                onChange={(e) => update("kiosk_url", e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-mono text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
+                placeholder="https://pos-app-taupe.vercel.app"
+              />
+              <p className="text-xs text-gray-500 mt-1 font-medium">
+                Pon la URL de Vercel: <strong>https://pos-app-taupe.vercel.app</strong>
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Tasa de impuesto (%)
-                </label>
+                <label className="block text-sm font-bold text-gray-900 mb-1.5">Tasa de impuesto (%)</label>
                 <input
                   type="number"
                   step="0.1"
@@ -188,17 +170,15 @@ export default function SettingsPage() {
                   max="50"
                   value={settings.tax_rate}
                   onChange={(e) => update("tax_rate", e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:border-green-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Moneda
-                </label>
+                <label className="block text-sm font-bold text-gray-900 mb-1.5">Moneda</label>
                 <select
                   value={settings.currency}
                   onChange={(e) => update("currency", e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:border-green-500 bg-white"
                 >
                   <option value="USD">USD - Dólar</option>
                   <option value="MXN">MXN - Peso Mexicano</option>
@@ -210,21 +190,19 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Color principal
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">Color principal</label>
               <div className="flex items-center gap-3">
                 <input
                   type="color"
                   value={settings.primary_color}
                   onChange={(e) => update("primary_color", e.target.value)}
-                  className="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-1"
+                  className="w-14 h-12 rounded-xl border-2 border-gray-200 cursor-pointer p-1"
                 />
                 <input
                   type="text"
                   value={settings.primary_color}
                   onChange={(e) => update("primary_color", e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-mono text-gray-900 focus:outline-none focus:border-green-500"
                   placeholder="#22c55e"
                 />
               </div>
@@ -279,21 +257,19 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Access Token
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">Access Token</label>
               <div className="relative">
                 <input
                   type={showToken ? "text" : "password"}
                   value={settings.square_access_token}
                   onChange={(e) => update("square_access_token", e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 pr-10 text-sm font-mono text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
                   placeholder={settings.square_environment === "sandbox" ? "sandbox-sq0idb-..." : "sq0atp-..."}
                 />
                 <button
                   type="button"
                   onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800"
                 >
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -301,14 +277,12 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Location ID
-              </label>
+              <label className="block text-sm font-bold text-gray-900 mb-1.5">Location ID</label>
               <input
                 type="text"
                 value={settings.square_location_id}
                 onChange={(e) => update("square_location_id", e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-mono text-gray-900 focus:outline-none focus:border-green-500 placeholder:text-gray-400"
                 placeholder="L..."
               />
             </div>
