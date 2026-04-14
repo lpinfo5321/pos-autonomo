@@ -17,7 +17,7 @@ export async function GET(
         where: { orderNumber: num },
         include: { items: true },
       }),
-      prisma.setting.findUnique({ where: { key: "cre_kiosk_plu" } }),
+      prisma.settings.findUnique({ where: { key: "cre_kiosk_plu" } }),
     ]);
 
     if (!order) {
