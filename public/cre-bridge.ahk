@@ -1,15 +1,16 @@
 ; ============================================================
-;  BRIDGE v9: Kiosco -> Cash Register Express
+;  BRIDGE v10: Kiosco -> Cash Register Express
 ;
-;  NUEVO METODO - Un solo PLU "KIOSKO" para toda la orden:
-;  1. El script busca el PLU "KIOSKO" configurado en el admin
-;  2. Lo agrega en CRE con el total exacto de la orden
-;  3. El cajero solo cobra ese monto - sin PLUs individuales
+;  METODO PROMPT PRICE:
+;  1. El script tipea el PLU "KIOSKO" en CRE
+;  2. CRE pide el precio automaticamente (Prompt Price activado)
+;  3. El script escribe el total de la orden
+;  4. Listo para cobrar
 ;
-;  REQUISITO: Crear en CRE un articulo "KIOSKO" con precio $0.00
-;  y configurar su PLU en Admin del kiosco > Configuracion
-;
-;  EJECUTAR COMO ADMINISTRADOR
+;  REQUISITOS:
+;  - Articulo KIOSKO en CRE con "Prompt Price" MARCADO
+;  - PLU del KIOSKO configurado en Admin del kiosco > Configuracion
+;  - EJECUTAR COMO ADMINISTRADOR
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -26,13 +27,13 @@ global capturedOrderNum  := ""
 global lastProcessed     := ""
 global lastProcessedTime := 0
 
-TrayTip, Bridge CRE v9, Activo. Escanea el ticket del cliente., 5
+TrayTip, Bridge CRE v10, Activo. Escanea el ticket del cliente., 5
 
 SetTimer, ReadScanField, 30
 SetTimer, WatchDialog,   150
 return
 
-; ── Leer campo de escaneo de CRE (numeros cortos = numero de orden)
+; ── Leer campo de escaneo de CRE ────────────────────────────────
 ReadScanField:
   global busy, lastScanField, capturedOrderNum
   if busy
@@ -46,7 +47,7 @@ ReadScanField:
       lastScanField := fv
       if fv is integer
       {
-        if (StrLen(fv) <= 6)   ; numeros cortos = orden, no PLU
+        if (StrLen(fv) <= 6)
           capturedOrderNum := fv
       }
     }
@@ -79,7 +80,6 @@ WatchDialog:
       return
     }
 
-    ; Anti-duplicado: misma orden en menos de 20 segundos
     now := A_TickCount
     if (orderNum = lastProcessed && (now - lastProcessedTime) < 20000)
     {
@@ -94,7 +94,6 @@ WatchDialog:
     lastProcessed     := orderNum
     lastProcessedTime := A_TickCount
 
-    ; Cerrar el dialogo de error
     WinActivate, Item Not Found
     Sleep, 200
     Send {Enter}
@@ -104,7 +103,7 @@ WatchDialog:
   }
   return
 
-; ── Consultar kiosco y agregar "KIOSKO $XX.XX" en CRE ───────────
+; ── Consultar kiosco y escribir PLU + precio en CRE ─────────────
 ProcesarOrden:
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -127,7 +126,7 @@ ProcesarOrden:
 
   if (httpStatus = 404)
   {
-    TrayTip, Bridge CRE, Orden #%orderNum% no encontrada en el kiosco., 5
+    TrayTip, Bridge CRE, Orden #%orderNum% no encontrada., 5
     SetTimer, ReadScanField, 30
     busy := false
     return
@@ -135,7 +134,7 @@ ProcesarOrden:
 
   if (httpStatus != 200)
   {
-    TrayTip, Bridge CRE, Error del servidor: %httpStatus%, 4
+    TrayTip, Bridge CRE, Error servidor: %httpStatus%, 4
     SetTimer, ReadScanField, 30
     busy := false
     return
@@ -143,12 +142,11 @@ ProcesarOrden:
 
   json := httpBody
 
-  ; Extraer PLU del kiosco y total de la orden
   RegExMatch(json, """kioskPlu"":""([^""]*?)""", pluM)
   RegExMatch(json, """total"":([\d.]+)", totalM)
 
   kioskPlu   := pluM1
-  orderTotal := totalM1
+  orderTotal := totalM1 + 0
 
   if (kioskPlu = "")
   {
@@ -158,18 +156,7 @@ ProcesarOrden:
     return
   }
 
-  if (orderTotal = "")
-  {
-    TrayTip, Bridge CRE, No se pudo leer el total de la orden., 4
-    SetTimer, ReadScanField, 30
-    busy := false
-    return
-  }
-
-  ; Formatear total como precio (ej: 15.99)
-  orderTotal := orderTotal + 0
-
-  ; Cerrar cualquier dialogo pendiente
+  ; Cerrar dialogo pendiente
   IfWinExist, Item Not Found
   {
     WinActivate, Item Not Found
@@ -186,42 +173,64 @@ ProcesarOrden:
     return
   }
 
+  ; ── Paso 1: tipear el PLU del KIOSKO ────────────────────────────
   WinActivate, Cash Register Express
   Sleep, 400
-
-  ; 1. Tipear PLU del articulo "KIOSKO"
   SendInput % kioskPlu
   Sleep, 100
   SendInput {Enter}
-  Sleep, 900
+  Sleep, 800
 
-  ; 2. Cambiar precio al total de la orden (Ctrl+L = Price Change en CRE)
-  IfWinExist, Item Not Found
+  ; ── Paso 2: CRE pide el precio (Prompt Price) → escribir total ──
+  ; Esperar hasta 3 segundos a que aparezca el dialogo de precio
+  priceDialogFound := false
+  Loop, 15
   {
-    ; Si CRE no reconoce el PLU, avisar
-    WinActivate, Item Not Found
-    Sleep, 100
-    Send {Enter}
+    ; CRE muestra un dialogo "Enter Price" o similar
+    IfWinExist, ahk_class #32770
+    {
+      priceDialogFound := true
+      break
+    }
+    ; Tambien puede ser que ya se haya agregado con otro dialogo
+    IfWinExist, Item Not Found
+    {
+      ; El PLU no fue reconocido
+      WinActivate, Item Not Found
+      Sleep, 100
+      Send {Enter}
+      Sleep, 200
+      TrayTip, Bridge CRE, PLU %kioskPlu% no reconocido en CRE.`nVerifica el PLU en Admin del kiosco., 7
+      SetTimer, ReadScanField, 30
+      busy := false
+      return
+    }
     Sleep, 200
-    TrayTip, Bridge CRE, PLU %kioskPlu% no encontrado en CRE.`nVerifica el PLU KIOSKO en Admin., 7
-    SetTimer, ReadScanField, 30
-    busy := false
-    return
   }
 
-  ; Price Change
-  WinActivate, Cash Register Express
-  Sleep, 300
-  Send ^l    ; Ctrl+L = PRICE CHANGE en CRE
-  Sleep, 600
+  if priceDialogFound
+  {
+    WinActivate, ahk_class #32770
+    Sleep, 200
+    SendInput % orderTotal
+    Sleep, 100
+    SendInput {Enter}
+    Sleep, 500
+  }
+  else
+  {
+    ; Si no hubo dialogo de precio, intentar con PRICE CHANGE (Ctrl+L)
+    WinActivate, Cash Register Express
+    Sleep, 300
+    Send ^l
+    Sleep, 600
+    SendInput % orderTotal
+    Sleep, 100
+    SendInput {Enter}
+    Sleep, 500
+  }
 
-  ; Tipear el total
-  SendInput % orderTotal
-  Sleep, 100
-  SendInput {Enter}
-  Sleep, 500
-
-  TrayTip, Listo, Orden #%orderNum% - Total $%orderTotal% en CRE., 4
+  TrayTip, Listo, Orden #%orderNum% - $%orderTotal% en CRE., 4
 
   Sleep, 2000
   lastScanField    := ""

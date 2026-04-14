@@ -21,6 +21,7 @@ const navItems = [
   { href: "/admin/menu", label: "Menú", icon: UtensilsCrossed },
   { href: "/admin/categories", label: "Categorías", icon: Tag },
   { href: "/admin/orders", label: "Pedidos", icon: ShoppingBag },
+  { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/admin/settings", label: "Configuración", icon: Settings },
 ];
 
