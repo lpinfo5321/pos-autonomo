@@ -1,25 +1,18 @@
 ; ============================================================
-;  BRIDGE v13: Kiosco -> Cash Register Express
+;  BRIDGE v14: Kiosco -> Cash Register Express
 ;
-;  PROBLEMA RESUELTO:
-;  - ControlGetText("Edit1") devuelve vacio porque el campo
-;    "Scan Barcode Now..." de CRE NO se llama Edit1.
+;  CAMBIOS CRITICOS:
+;  1. AUTO-ELEVACION: si no se abre como Administrador, el
+;     script se reinicia solo con permisos de admin.
+;     Sin admin, el script NO puede enviar teclas a CRE.
 ;
-;  SOLUCION:
-;  Interceptamos cada tecla de digito (0-9) cuando CRE esta
-;  activo y las acumulamos en un buffer propio.
-;  Cuando llega el Enter, tenemos el numero completo del ticket.
-;  El buffer se resetea si hay mas de 300ms entre teclas
-;  (eso diferencia escaneo rapido de escritura manual).
+;  2. DETECCION MULTIPLE del dialogo "Item Not Found":
+;     - Por titulo: "Item Not Found!" (con y sin !)
+;     - Por clase de ventana: ahk_class #32770 (todos los dialogos)
 ;
-;  FLUJO:
-;  1. Escaner envia "4" + Enter → capturamos "4" en nuestro buffer
-;  2. CRE muestra "Item Not Found!" → script lo cierra en < 80ms
-;  3. API del kiosco devuelve los PLUs del pedido
-;  4. Script tipea cada PLU en CRE
-;  5. PLUs desconocidos se descartan silenciosamente
-;
-;  REQUISITOS: Ejecutar como ADMINISTRADOR
+;  3. CIERRE DEL DIALOGO por multiple metodos:
+;     - WinActivate + Send {Enter}
+;     - ControlClick en boton OK
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -27,6 +20,23 @@
 #InstallKeybdHook
 SetBatchLines -1
 SetTitleMatchMode, 2
+
+; ── AUTO-ELEVAR A ADMINISTRADOR ──────────────────────────────────────────────
+if !A_IsAdmin
+{
+  try
+  {
+    ; Reiniciar el script con permisos de Administrador
+    Run *RunAs "%A_AhkPath%" "%A_ScriptFullPath%"
+    ExitApp
+  }
+  catch
+  {
+    MsgBox, 16, Bridge CRE - ERROR, Necesita permisos de Administrador.`n`nHaz clic derecho en el script y selecciona "Ejecutar como administrador".
+    ExitApp
+  }
+}
+; ── FIN AUTO-ELEVACION ───────────────────────────────────────────────────────
 
 API_BASE := "https://pos-app-taupe.vercel.app"
 
@@ -38,14 +48,13 @@ global lastProcessed     := ""
 global lastProcessedTime := 0
 global g_plu             := ""
 
-TrayTip, Bridge CRE v13, Activo - Escanea el ticket., 5
+; Confirmar que se esta ejecutando con admin
+TrayTip, Bridge CRE v14 ✓ ADMIN, Activo. Escanea el ticket del cliente., 5
+
 SetTimer, WatchDialog, 80
 return
 
-; ── Captura de digitos del escaner ──────────────────────────────────────────
-; Cada digito se acumula en scanBuffer mientras CRE este activo y no este ocupado.
-; Si pasan mas de 300ms desde el ultimo digito, se resetea (fin de escaneo anterior).
-
+; ── CAPTURA DE DIGITOS DEL ESCANER ──────────────────────────────────────────
 ~*0::
   if busy
     return
@@ -58,7 +67,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*1::
   if busy
     return
@@ -71,7 +79,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*2::
   if busy
     return
@@ -84,7 +91,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*3::
   if busy
     return
@@ -97,7 +103,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*4::
   if busy
     return
@@ -110,7 +115,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*5::
   if busy
     return
@@ -123,7 +127,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*6::
   if busy
     return
@@ -136,7 +139,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*7::
   if busy
     return
@@ -149,7 +151,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*8::
   if busy
     return
@@ -162,7 +163,6 @@ return
     scanLastKeyTime := A_TickCount
   }
   return
-
 ~*9::
   if busy
     return
@@ -176,7 +176,7 @@ return
   }
   return
 
-; ── Enter: procesar el buffer acumulado ─────────────────────────────────────
+; ── ENTER: finalizar captura del buffer ─────────────────────────────────────
 ~*Enter::
   if busy
     return
@@ -191,12 +191,16 @@ return
     {
       n := buf + 0
       if (n >= 1 && n <= 99999)
+      {
         capturedOrderNum := buf
+        ; TrayTip de diagnostico — descomenta si necesitas ver que numero se capturo:
+        ; TrayTip, Capturado, Numero: %buf%, 2
+      }
     }
   }
   return
 
-; ── Hotkey manual: Ctrl+Shift+R = reprocesar ultima orden ───────────────────
+; ── HOTKEY MANUAL: Ctrl+Shift+R = reprocesar ultima orden ───────────────────
 ^+r::
   if busy
   {
@@ -214,78 +218,122 @@ return
   GoSub, ProcesarOrden
   return
 
-; ── Detectar dialogo "Item Not Found!" y procesar ───────────────────────────
-WatchDialog:
-  SetTitleMatchMode, 2
-  if busy
-    return
+; ── DETECCION DEL DIALOGO ────────────────────────────────────────────────────
+; Intenta varios metodos para encontrar el dialogo de CRE
+FindCREDialog:
+  global g_dialogFound
+  g_dialogFound := ""
 
+  SetTitleMatchMode, 2
+  ; Metodo 1: titulo con o sin !
+  IfWinExist, Item Not Found!
+  {
+    g_dialogFound := "Item Not Found!"
+    return
+  }
   IfWinExist, Item Not Found
   {
-    orderNum        := capturedOrderNum
-    capturedOrderNum := ""
-    scanBuffer      := ""
-
-    ; Si no hay numero, solo cerrar el dialogo
-    if orderNum is not integer
+    g_dialogFound := "Item Not Found"
+    return
+  }
+  ; Metodo 2: cualquier dialogo (#32770) que tenga "Not Found" en el titulo
+  SetTitleMatchMode, 2
+  IfWinExist, ahk_class #32770
+  {
+    WinGetTitle, tmpT, ahk_class #32770
+    if (InStr(tmpT, "Not Found") || InStr(tmpT, "Item") || InStr(tmpT, "not entered"))
     {
-      WinActivate, Item Not Found
-      Sleep, 80
-      Send {Enter}
+      g_dialogFound := "ahk_class #32770"
       return
     }
-
-    ; Anti-duplicado: ignorar si la misma orden se proceso en los ultimos 30s
-    now := A_TickCount
-    if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
-    {
-      WinActivate, Item Not Found
-      Sleep, 80
-      Send {Enter}
-      TrayTip, Bridge CRE, Orden #%orderNum% ya fue procesada., 3
-      return
-    }
-
-    busy              := true
-    lastProcessed     := orderNum
-    lastProcessedTime := A_TickCount
-
-    ; Cerrar dialogo
-    WinActivate, Item Not Found
-    Sleep, 80
-    Send {Enter}
-    Sleep, 350
-
-    GoSub, ProcesarOrden
   }
   return
 
-; ── Tipear un PLU — descarta silenciosamente si CRE no lo reconoce ──────────
+; ── CERRAR DIALOGO ACTIVO ────────────────────────────────────────────────────
+CloseDialog:
+  if (g_dialogFound = "")
+    return
+  WinActivate, %g_dialogFound%
+  Sleep, 100
+  ; Metodo 1: Send Enter
+  Send {Enter}
+  Sleep, 80
+  ; Metodo 2: click en boton OK (por si Enter no funciono)
+  IfWinExist, %g_dialogFound%
+  {
+    ControlClick, Button1, %g_dialogFound%
+    Sleep, 80
+  }
+  return
+
+; ── TIMER: VIGILAR DIALOGO ───────────────────────────────────────────────────
+WatchDialog:
+  if busy
+    return
+
+  GoSub, FindCREDialog
+  if (g_dialogFound = "")
+    return
+
+  ; Hay un dialogo — capturar numero de orden
+  orderNum        := capturedOrderNum
+  capturedOrderNum := ""
+  scanBuffer      := ""
+
+  ; Si no hay numero valido, solo cerrar el dialogo
+  if orderNum is not integer
+  {
+    GoSub, CloseDialog
+    return
+  }
+
+  ; Anti-duplicado: no reprocesar la misma orden por 30 segundos
+  now := A_TickCount
+  if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
+  {
+    GoSub, CloseDialog
+    TrayTip, Bridge CRE, Orden #%orderNum% ya procesada., 3
+    return
+  }
+
+  ; Bloquear re-entrada
+  busy              := true
+  lastProcessed     := orderNum
+  lastProcessedTime := A_TickCount
+
+  ; Cerrar el dialogo
+  GoSub, CloseDialog
+  Sleep, 400
+
+  GoSub, ProcesarOrden
+  return
+
+; ── TIPEAR UN PLU ─────────────────────────────────────────────────────────────
 TypePLU:
   SetTitleMatchMode, 2
   IfWinNotExist, Cash Register Express
     return
   WinActivate, Cash Register Express
-  Sleep, 100
+  Sleep, 120
   SendInput % g_plu
   Sleep, 60
   SendInput {Enter}
-  ; Esperar hasta 700ms a que CRE responda
+  ; Esperar a que CRE responda (hasta 700ms)
   Loop, 7
   {
     Sleep, 100
-    IfWinExist, Item Not Found
+    GoSub, FindCREDialog
+    if (g_dialogFound != "")
     {
-      WinActivate, Item Not Found
-      Sleep, 50
-      Send {Enter}
+      ; PLU no reconocido: descartar silenciosamente
+      GoSub, CloseDialog
       Sleep, 150
       break
     }
   }
   return
 
-; ── Consultar API y tipear los PLUs del pedido ──────────────────────────────
+; ── CONSULTAR API Y ESCRIBIR PLUs EN CRE ────────────────────────────────────
 ProcesarOrden:
   SetTitleMatchMode, 2
   TrayTip, Bridge CRE, Buscando orden #%orderNum%..., 2
@@ -300,7 +348,7 @@ ProcesarOrden:
   }
   catch e
   {
-    TrayTip, Bridge CRE, Sin conexion a internet., 4
+    TrayTip, Bridge CRE, Sin conexion., 4
     busy := false
     return
   }
@@ -316,7 +364,7 @@ ProcesarOrden:
   }
   if (httpStatus != 200)
   {
-    TrayTip, Bridge CRE, Error del servidor: %httpStatus%, 4
+    TrayTip, Bridge CRE, Error %httpStatus%, 4
     busy := false
     return
   }
@@ -328,7 +376,7 @@ ProcesarOrden:
     return
   }
 
-  ; ── Parsear JSON y tipear PLUs ────────────────────────────────────────────
+  ; ── Parsear JSON ──────────────────────────────────────────────────────────
   json       := httpBody
   pos        := 1
   itemsAdded := 0
@@ -399,7 +447,7 @@ ProcesarOrden:
     itemsAdded++
   }
 
-  TrayTip, Listo, Orden #%orderNum% - %itemsAdded% producto(s) cargados., 4
+  TrayTip, Listo, Orden #%orderNum% - %itemsAdded% producto(s) en CRE., 4
 
   Sleep, 1500
   capturedOrderNum := ""
