@@ -1,24 +1,25 @@
 ; ============================================================
-;  BRIDGE v12: Kiosco -> Cash Register Express
+;  BRIDGE v13: Kiosco -> Cash Register Express
 ;
-;  SOLUCION AL PROBLEMA DE TIMING:
-;  Antes: un timer intentaba leer el campo DESPUES de que CRE
-;         ya lo habia borrado → nunca capturaba el numero.
-;  Ahora: interceptamos la tecla Enter mientras CRE esta activo.
-;         En ese momento el campo Edit1 todavia tiene el valor
-;         del escaner → captura 100% confiable.
+;  PROBLEMA RESUELTO:
+;  - ControlGetText("Edit1") devuelve vacio porque el campo
+;    "Scan Barcode Now..." de CRE NO se llama Edit1.
+;
+;  SOLUCION:
+;  Interceptamos cada tecla de digito (0-9) cuando CRE esta
+;  activo y las acumulamos en un buffer propio.
+;  Cuando llega el Enter, tenemos el numero completo del ticket.
+;  El buffer se resetea si hay mas de 300ms entre teclas
+;  (eso diferencia escaneo rapido de escritura manual).
 ;
 ;  FLUJO:
-;  1. Escaner envia digitos + Enter a CRE
-;  2. ANTES de que CRE procese el Enter, capturamos el valor
-;  3. CRE muestra "Item Not Found" (numero de orden no es un PLU)
-;  4. Script cierra el dialogo automaticamente
-;  5. Consulta el kiosco, tipea los PLUs del pedido en CRE
-;  6. Cualquier PLU no reconocido se descarta silenciosamente
+;  1. Escaner envia "4" + Enter → capturamos "4" en nuestro buffer
+;  2. CRE muestra "Item Not Found!" → script lo cierra en < 80ms
+;  3. API del kiosco devuelve los PLUs del pedido
+;  4. Script tipea cada PLU en CRE
+;  5. PLUs desconocidos se descartan silenciosamente
 ;
-;  REQUISITOS:
-;  - Ejecutar como ADMINISTRADOR
-;  - CRE debe estar abierto
+;  REQUISITOS: Ejecutar como ADMINISTRADOR
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -31,83 +32,167 @@ API_BASE := "https://pos-app-taupe.vercel.app"
 
 global busy              := false
 global capturedOrderNum  := ""
+global scanBuffer        := ""
+global scanLastKeyTime   := 0
 global lastProcessed     := ""
 global lastProcessedTime := 0
+global g_plu             := ""
 
-TrayTip, Bridge CRE v12, Activo - Escanea el ticket del cliente., 5
-
-; Solo se necesita el timer para cerrar el dialogo y procesar
+TrayTip, Bridge CRE v13, Activo - Escanea el ticket., 5
 SetTimer, WatchDialog, 80
 return
 
-; ── Interceptar Enter cuando CRE esta activo ────────────────────────────────
-; ~*Enter:: pasa el Enter a CRE Y ademas ejecuta este bloque.
-; Si busy=true (el script esta tipeando PLUs) ignoramos la captura
-; para que los PLUs que se tipean no se confundan con numeros de orden.
+; ── Captura de digitos del escaner ──────────────────────────────────────────
+; Cada digito se acumula en scanBuffer mientras CRE este activo y no este ocupado.
+; Si pasan mas de 300ms desde el ultimo digito, se resetea (fin de escaneo anterior).
+
+~*0::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "0"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*1::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "1"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*2::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "2"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*3::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "3"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*4::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "4"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*5::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "5"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*6::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "6"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*7::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "7"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*8::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "8"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+~*9::
+  if busy
+    return
+  SetTitleMatchMode, 2
+  IfWinActive, Cash Register Express
+  {
+    if (A_TickCount - scanLastKeyTime > 300)
+      scanBuffer := ""
+    scanBuffer .= "9"
+    scanLastKeyTime := A_TickCount
+  }
+  return
+
+; ── Enter: procesar el buffer acumulado ─────────────────────────────────────
 ~*Enter::
   if busy
     return
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
-    ; Leer el campo en el momento exacto antes de que CRE lo procese
-    ControlGetText, fv, Edit1, Cash Register Express
-    fv := Trim(fv)
-    if (fv = "")
+    buf        := scanBuffer
+    scanBuffer := ""
+    if (buf = "")
       return
-    ; Solo capturar si es un numero entero corto (1-5 digitos = numero de orden)
-    if fv is integer
+    if buf is integer
     {
-      n := fv + 0
+      n := buf + 0
       if (n >= 1 && n <= 99999)
-        capturedOrderNum := fv
+        capturedOrderNum := buf
     }
-  }
-  return
-
-; ── Detectar dialogo "Item Not Found" y procesar orden ──────────────────────
-WatchDialog:
-  SetTitleMatchMode, 2
-  if busy
-    return
-
-  IfWinExist, Item Not Found
-  {
-    orderNum := capturedOrderNum
-    capturedOrderNum := ""
-
-    ; Si no hay numero capturado, solo cerrar el dialogo
-    if orderNum is not integer
-    {
-      WinActivate, Item Not Found
-      Sleep, 80
-      Send {Enter}
-      return
-    }
-
-    ; Anti-duplicado: ignorar la misma orden por 30 segundos
-    now := A_TickCount
-    if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
-    {
-      WinActivate, Item Not Found
-      Sleep, 80
-      Send {Enter}
-      TrayTip, Bridge CRE, Orden #%orderNum% ya procesada., 3
-      return
-    }
-
-    ; Bloquear re-entrada ANTES de cualquier Sleep
-    busy := true
-    lastProcessed     := orderNum
-    lastProcessedTime := A_TickCount
-
-    ; Cerrar el dialogo
-    WinActivate, Item Not Found
-    Sleep, 80
-    Send {Enter}
-    Sleep, 400
-
-    GoSub, ProcesarOrden
   }
   return
 
@@ -129,27 +214,68 @@ WatchDialog:
   GoSub, ProcesarOrden
   return
 
-; ── Tipear un PLU y descartar silenciosamente si no existe en CRE ────────────
-; Usa la variable global g_plu
+; ── Detectar dialogo "Item Not Found!" y procesar ───────────────────────────
+WatchDialog:
+  SetTitleMatchMode, 2
+  if busy
+    return
+
+  IfWinExist, Item Not Found
+  {
+    orderNum        := capturedOrderNum
+    capturedOrderNum := ""
+    scanBuffer      := ""
+
+    ; Si no hay numero, solo cerrar el dialogo
+    if orderNum is not integer
+    {
+      WinActivate, Item Not Found
+      Sleep, 80
+      Send {Enter}
+      return
+    }
+
+    ; Anti-duplicado: ignorar si la misma orden se proceso en los ultimos 30s
+    now := A_TickCount
+    if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
+    {
+      WinActivate, Item Not Found
+      Sleep, 80
+      Send {Enter}
+      TrayTip, Bridge CRE, Orden #%orderNum% ya fue procesada., 3
+      return
+    }
+
+    busy              := true
+    lastProcessed     := orderNum
+    lastProcessedTime := A_TickCount
+
+    ; Cerrar dialogo
+    WinActivate, Item Not Found
+    Sleep, 80
+    Send {Enter}
+    Sleep, 350
+
+    GoSub, ProcesarOrden
+  }
+  return
+
+; ── Tipear un PLU — descarta silenciosamente si CRE no lo reconoce ──────────
 TypePLU:
   SetTitleMatchMode, 2
   IfWinNotExist, Cash Register Express
     return
-
   WinActivate, Cash Register Express
-  Sleep, 120
-
+  Sleep, 100
   SendInput % g_plu
   Sleep, 60
   SendInput {Enter}
-
-  ; Esperar hasta 700ms a que CRE procese el PLU
+  ; Esperar hasta 700ms a que CRE responda
   Loop, 7
   {
     Sleep, 100
     IfWinExist, Item Not Found
     {
-      ; PLU no reconocido — cerrar silenciosamente y continuar
       WinActivate, Item Not Found
       Sleep, 50
       Send {Enter}
@@ -159,15 +285,14 @@ TypePLU:
   }
   return
 
-; ── Consultar kiosco y escribir PLUs en CRE ─────────────────────────────────
+; ── Consultar API y tipear los PLUs del pedido ──────────────────────────────
 ProcesarOrden:
   SetTitleMatchMode, 2
-  url := API_BASE . "/api/orders/pos/" . orderNum
-
-  ; Notificar que se esta procesando
   TrayTip, Bridge CRE, Buscando orden #%orderNum%..., 2
 
+  url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+
   try
   {
     whr.Open("GET", url, false)
@@ -189,10 +314,9 @@ ProcesarOrden:
     busy := false
     return
   }
-
   if (httpStatus != 200)
   {
-    TrayTip, Bridge CRE, Error del servidor %httpStatus%, 4
+    TrayTip, Bridge CRE, Error del servidor: %httpStatus%, 4
     busy := false
     return
   }
@@ -204,21 +328,17 @@ ProcesarOrden:
     return
   }
 
-  ; ── Parsear JSON ──────────────────────────────────────────────────────────
-  ; Formato: { "items": [ { "qty":N, "plus":["PLU1","PLU2"] }, ... ] }
-
+  ; ── Parsear JSON y tipear PLUs ────────────────────────────────────────────
   json       := httpBody
   pos        := 1
   itemsAdded := 0
 
   Loop
   {
-    ; Buscar siguiente objeto { }
     startBrace := InStr(json, "{", false, pos)
     if (startBrace = 0)
       break
 
-    ; Encontrar el cierre correspondiente
     depth    := 0
     endBrace := 0
     i        := startBrace
@@ -244,13 +364,11 @@ ProcesarOrden:
     itemJson := SubStr(json, startBrace, endBrace - startBrace + 1)
     pos      := endBrace + 1
 
-    ; Extraer qty
     RegExMatch(itemJson, """qty""\s*:\s*(\d+)", qtyM)
     itemQty := (qtyM1 + 0)
     if (itemQty < 1)
       itemQty := 1
 
-    ; Extraer lista de PLUs del array "plus"
     RegExMatch(itemJson, """plus""\s*:\s*\[([^\]]*)\]", plusM)
     plusRaw := plusM1
 
@@ -268,7 +386,6 @@ ProcesarOrden:
     if (plusList.Length() = 0)
       continue
 
-    ; Tipear: qty repeticiones de la combinacion de PLUs
     Loop, % itemQty
     {
       for k, plu in plusList
@@ -282,9 +399,10 @@ ProcesarOrden:
     itemsAdded++
   }
 
-  TrayTip, Listo, Orden #%orderNum% - %itemsAdded% producto(s) en CRE., 4
+  TrayTip, Listo, Orden #%orderNum% - %itemsAdded% producto(s) cargados., 4
 
   Sleep, 1500
   capturedOrderNum := ""
+  scanBuffer       := ""
   busy             := false
   return
