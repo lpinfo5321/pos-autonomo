@@ -277,26 +277,36 @@ WatchDialog:
   return
 
 ; Numpad (muchos scanners envian numpad)
-~*Numpad0:: GoSub, NP0
-~*Numpad1:: GoSub, NP1
-~*Numpad2:: GoSub, NP2
-~*Numpad3:: GoSub, NP3
-~*Numpad4:: GoSub, NP4
-~*Numpad5:: GoSub, NP5
-~*Numpad6:: GoSub, NP6
-~*Numpad7:: GoSub, NP7
-~*Numpad8:: GoSub, NP8
-~*Numpad9:: GoSub, NP9
-NP0: GoSub, NPAdd0 & return
-NP1: GoSub, NPAdd1 & return
-NP2: GoSub, NPAdd2 & return
-NP3: GoSub, NPAdd3 & return
-NP4: GoSub, NPAdd4 & return
-NP5: GoSub, NPAdd5 & return
-NP6: GoSub, NPAdd6 & return
-NP7: GoSub, NPAdd7 & return
-NP8: GoSub, NPAdd8 & return
-NP9: GoSub, NPAdd9 & return
+~*Numpad0::
+  GoSub, NPAdd0
+  return
+~*Numpad1::
+  GoSub, NPAdd1
+  return
+~*Numpad2::
+  GoSub, NPAdd2
+  return
+~*Numpad3::
+  GoSub, NPAdd3
+  return
+~*Numpad4::
+  GoSub, NPAdd4
+  return
+~*Numpad5::
+  GoSub, NPAdd5
+  return
+~*Numpad6::
+  GoSub, NPAdd6
+  return
+~*Numpad7::
+  GoSub, NPAdd7
+  return
+~*Numpad8::
+  GoSub, NPAdd8
+  return
+~*Numpad9::
+  GoSub, NPAdd9
+  return
 NPAdd0:
   if busy
     return
