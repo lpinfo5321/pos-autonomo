@@ -1,14 +1,5 @@
 ; ============================================================
-;  BRIDGE v17: Kiosco -> Cash Register Express
-;
-;  NUEVO ENFOQUE - Sin depender de detectar el dialogo:
-;  1. Los digitos del escaner se INTERCEPTAN (no llegan a CRE)
-;  2. Cuando llega el Enter, se replayan los digitos a CRE
-;  3. Se espera max 400ms para ver si CRE muestra "Item Not Found"
-;  4. Si aparece: es un numero de orden -> procesar con PLUs
-;  5. Si no aparece: era un PLU valido -> CRE lo proceso normal
-;
-;  IMPORTANTE: Ejecutar como ADMINISTRADOR
+;  BRIDGE v18 - DIAGNOSTICO DEFINITIVO
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -16,6 +7,7 @@
 #InstallKeybdHook
 SetBatchLines -1
 
+; AUTO-ADMIN
 if !A_IsAdmin
 {
   try
@@ -25,7 +17,7 @@ if !A_IsAdmin
   }
   catch
   {
-    MsgBox, 16, Bridge CRE, Clic derecho en el archivo -> "Ejecutar como administrador"
+    MsgBox, 16, Bridge CRE, NECESITA ADMINISTRADOR.`n`nHaz clic derecho en el archivo .ahk y selecciona`n"Ejecutar como administrador"
     ExitApp
   }
 }
@@ -39,20 +31,96 @@ global lastProcessed     := ""
 global lastProcessedTime := 0
 global g_plu             := ""
 
-TrayTip, Bridge CRE v17 ACTIVO, Escanea el ticket del cliente., 6
+; ── CONFIRMACION VISIBLE AL INICIAR ──────────────────────────────────────────
+MsgBox, 64, Bridge CRE v18 - ACTIVO, El script esta corriendo como ADMINISTRADOR: %A_IsAdmin%`n`nPrueba de funcionamiento:`n1. Cierra este mensaje`n2. Escanea un ticket en CRE`n3. El script debe cerrar el dialogo rojo automaticamente`n`nSi ves el icono "H" verde en el tray el script esta activo., 5
+
+SetTimer, WatchDialog, 50
 return
 
-; ═══════════════════════════════════════════════════════════════════════════
-; CAPTURA DE DIGITOS (sin ~ = los digitos NO llegan a CRE todavia)
-; Cuando busy=true el script esta tipeando PLUs, pasamos los digitos a CRE
-; ═══════════════════════════════════════════════════════════════════════════
-
-*0::
+; ── TIMER: detectar y cerrar dialogo con TODOS los metodos posibles ───────────
+WatchDialog:
+  SetTitleMatchMode, 2
   if busy
-  {
-    SendInput 0
     return
+
+  IfWinExist, Item Not Found
+  {
+    busy := true
+    TrayTip, BRIDGE - DETECTADO, Dialogo encontrado. Cerrando..., 3
+
+    ; METODO 1: Activar y Enter
+    WinActivate, Item Not Found
+    Sleep, 150
+    Send {Enter}
+    Sleep, 100
+
+    ; METODO 2: Click en boton OK
+    ControlClick, Button1, Item Not Found
+    Sleep, 100
+
+    ; METODO 3: PostMessage BM_CLICK (no requiere foco)
+    PostMessage, 0x00F5, 0, 0, Button1, Item Not Found
+    Sleep, 150
+
+    ; Verificar si se cerro
+    IfWinExist, Item Not Found
+    {
+      ; METODO 4: Click directo en coordenadas del boton OK
+      WinGetPos, dlgX, dlgY, dlgW, dlgH, Item Not Found
+      btnX := dlgX + dlgW // 2
+      btnY := dlgY + dlgH - 40
+      Click, %btnX%, %btnY%
+      Sleep, 200
+    }
+
+    ; Verificar estado final
+    IfWinExist, Item Not Found
+    {
+      TrayTip, BRIDGE - FALLO, No pudo cerrar el dialogo. Sin permisos., 8
+      busy := false
+      return
+    }
+
+    TrayTip, BRIDGE - CERRADO, Dialogo cerrado OK., 3
+
+    ; Capturar numero de orden del buffer
+    orderNum := scanBuffer
+    if (orderNum = "")
+      orderNum := lastProcessed
+
+    if orderNum is not integer
+    {
+      busy := false
+      return
+    }
+
+    n := orderNum + 0
+    if (n < 1 || n > 99999)
+    {
+      busy := false
+      return
+    }
+
+    now := A_TickCount
+    if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
+    {
+      TrayTip, Bridge CRE, Orden #%orderNum% ya procesada., 3
+      busy := false
+      return
+    }
+
+    lastProcessed     := orderNum
+    lastProcessedTime := A_TickCount
+    scanBuffer        := ""
+    Sleep, 300
+    GoSub, ProcesarOrden
   }
+  return
+
+; ── CAPTURA DE DIGITOS (con passthrough ~) ────────────────────────────────────
+~*0::
+  if busy
+    return
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -61,16 +129,10 @@ return
     scanBuffer .= "0"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 0
   return
-
-*1::
+~*1::
   if busy
-  {
-    SendInput 1
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -79,16 +141,10 @@ return
     scanBuffer .= "1"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 1
   return
-
-*2::
+~*2::
   if busy
-  {
-    SendInput 2
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -97,16 +153,10 @@ return
     scanBuffer .= "2"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 2
   return
-
-*3::
+~*3::
   if busy
-  {
-    SendInput 3
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -115,16 +165,10 @@ return
     scanBuffer .= "3"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 3
   return
-
-*4::
+~*4::
   if busy
-  {
-    SendInput 4
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -133,16 +177,10 @@ return
     scanBuffer .= "4"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 4
   return
-
-*5::
+~*5::
   if busy
-  {
-    SendInput 5
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -151,16 +189,10 @@ return
     scanBuffer .= "5"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 5
   return
-
-*6::
+~*6::
   if busy
-  {
-    SendInput 6
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -169,16 +201,10 @@ return
     scanBuffer .= "6"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 6
   return
-
-*7::
+~*7::
   if busy
-  {
-    SendInput 7
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -187,16 +213,10 @@ return
     scanBuffer .= "7"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 7
   return
-
-*8::
+~*8::
   if busy
-  {
-    SendInput 8
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -205,16 +225,10 @@ return
     scanBuffer .= "8"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 8
   return
-
-*9::
+~*9::
   if busy
-  {
-    SendInput 9
     return
-  }
   SetTitleMatchMode, 2
   IfWinActive, Cash Register Express
   {
@@ -223,109 +237,12 @@ return
     scanBuffer .= "9"
     scanLastKeyTime := A_TickCount
   }
-  else
-    SendInput 9
   return
 
-; ═══════════════════════════════════════════════════════════════════════════
-; ENTER: decidir si es orden del kiosco o PLU normal
-; ═══════════════════════════════════════════════════════════════════════════
-*Enter::
-  if busy
-  {
-    SendInput {Enter}
-    return
-  }
-
-  SetTitleMatchMode, 2
-  IfWinActive, Cash Register Express
-  {
-    buf        := scanBuffer
-    scanBuffer := ""
-
-    ; Si el buffer esta vacio, pasar Enter normal a CRE
-    if (buf = "")
-    {
-      SendInput {Enter}
-      return
-    }
-
-    ; Si no es un numero, pasar todo a CRE como texto normal
-    if buf is not integer
-    {
-      SendInput % buf
-      SendInput {Enter}
-      return
-    }
-
-    n := buf + 0
-    if (n < 1 || n > 99999)
-    {
-      SendInput % buf
-      SendInput {Enter}
-      return
-    }
-
-    ; Podria ser un numero de orden del kiosco (1-99999)
-    ; Enviar los digitos + Enter a CRE para que intente procesarlos
-    SendInput % buf
-    Sleep, 60
-    SendInput {Enter}
-
-    ; Esperar hasta 500ms para ver si CRE muestra "Item Not Found"
-    SetTitleMatchMode, 2
-    WinWait, Item Not Found, , 0.5
-    if ErrorLevel
-    {
-      ; No aparecio dialogo -> era un PLU valido, CRE lo proceso normal
-      return
-    }
-
-    ; DIALOGO ENCONTRADO - es un numero de orden del kiosco
-    ; Anti-duplicado
-    now := A_TickCount
-    if (buf = lastProcessed && (now - lastProcessedTime) < 30000)
-    {
-      WinActivate, Item Not Found
-      Sleep, 80
-      Send {Enter}
-      ControlClick, Button1, Item Not Found
-      TrayTip, Bridge CRE, Orden #%buf% ya procesada., 3
-      return
-    }
-
-    ; Procesar la orden
-    busy              := true
-    lastProcessed     := buf
-    lastProcessedTime := A_TickCount
-    orderNum          := buf
-
-    ; Cerrar dialogo
-    WinActivate, Item Not Found
-    Sleep, 100
-    Send {Enter}
-    Sleep, 80
-    ControlClick, Button1, Item Not Found
-    Sleep, 350
-
-    GoSub, ProcesarOrden
-  }
-  else
-  {
-    ; No es CRE, pasar Enter normal
-    SendInput {Enter}
-  }
-  return
-
-; ═══════════════════════════════════════════════════════════════════════════
-; REPROCESAR ULTIMA ORDEN: Ctrl+Shift+R
-; ═══════════════════════════════════════════════════════════════════════════
+; ── REPROCESAR: Ctrl+Shift+R ──────────────────────────────────────────────────
 ^+r::
   if busy
-  {
-    TrayTip, Bridge CRE, Ocupado..., 2
     return
-  }
   if (lastProcessed = "")
   {
     TrayTip, Bridge CRE, No hay orden reciente., 3
@@ -337,19 +254,16 @@ return
   GoSub, ProcesarOrden
   return
 
-; ═══════════════════════════════════════════════════════════════════════════
-; TIPEAR UN PLU EN CRE (cierra silenciosamente "Item Not Found" si aparece)
-; ═══════════════════════════════════════════════════════════════════════════
+; ── TIPEAR UN PLU ─────────────────────────────────────────────────────────────
 TypePLU:
   SetTitleMatchMode, 2
   IfWinNotExist, Cash Register Express
     return
   WinActivate, Cash Register Express
-  Sleep, 120
+  Sleep, 150
   SendInput % g_plu
-  Sleep, 60
+  Sleep, 80
   SendInput {Enter}
-  ; Esperar max 800ms para ver si CRE reporta PLU no encontrado
   Loop, 8
   {
     Sleep, 100
@@ -357,21 +271,20 @@ TypePLU:
     IfWinExist, Item Not Found
     {
       WinActivate, Item Not Found
-      Sleep, 50
+      Sleep, 60
       Send {Enter}
       ControlClick, Button1, Item Not Found
+      PostMessage, 0x00F5, 0, 0, Button1, Item Not Found
       Sleep, 120
       break
     }
   }
   return
 
-; ═══════════════════════════════════════════════════════════════════════════
-; CONSULTAR API Y ESCRIBIR PLUs
-; ═══════════════════════════════════════════════════════════════════════════
+; ── PROCESAR ORDEN ────────────────────────────────────────────────────────────
 ProcesarOrden:
   SetTitleMatchMode, 2
-  TrayTip, Bridge CRE, Orden #%orderNum%..., 2
+  TrayTip, Bridge CRE, Buscando orden #%orderNum%..., 2
 
   url := API_BASE . "/api/orders/pos/" . orderNum
   whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -411,7 +324,6 @@ ProcesarOrden:
     return
   }
 
-  ; Parsear JSON
   json       := httpBody
   pos        := 1
   itemsAdded := 0
@@ -421,7 +333,6 @@ ProcesarOrden:
     startBrace := InStr(json, "{", false, pos)
     if (startBrace = 0)
       break
-
     depth    := 0
     endBrace := 0
     i        := startBrace
@@ -443,7 +354,6 @@ ProcesarOrden:
     }
     if (endBrace = 0)
       break
-
     itemJson := SubStr(json, startBrace, endBrace - startBrace + 1)
     pos      := endBrace + 1
 
@@ -478,12 +388,10 @@ ProcesarOrden:
       }
       Sleep, 200
     }
-
     itemsAdded++
   }
 
-  TrayTip, Listo, Orden #%orderNum% - %itemsAdded% producto(s) en CRE., 4
-
+  TrayTip, LISTO, Orden #%orderNum% - %itemsAdded% producto(s) en CRE., 5
   Sleep, 1500
   scanBuffer := ""
   busy       := false
