@@ -1,16 +1,19 @@
 ; ============================================================
-;  BRIDGE v10: Kiosco -> Cash Register Express
+;  BRIDGE v11: Kiosco -> Cash Register Express
+;  Metodo: PLU individual por cada producto y modificador
 ;
-;  METODO PROMPT PRICE:
-;  1. El script tipea el PLU "KIOSKO" en CRE
-;  2. CRE pide el precio automaticamente (Prompt Price activado)
-;  3. El script escribe el total de la orden
-;  4. Listo para cobrar
+;  FLUJO:
+;  1. Cajero escanea el ticket del cliente (codigo de barras)
+;  2. CRE muestra "Item Not Found" (el # de orden no es un PLU)
+;  3. Este script detecta el dialogo, cierra automaticamente
+;  4. Consulta el kiosco para obtener los productos con sus PLUs
+;  5. Tipea cada PLU en CRE uno por uno
+;  6. Si algun PLU no existe en CRE, lo descarta silenciosamente
+;  7. El cajero solo cobra el total que ya aparece en CRE
 ;
 ;  REQUISITOS:
-;  - Articulo KIOSKO en CRE con "Prompt Price" MARCADO
-;  - PLU del KIOSKO configurado en Admin del kiosco > Configuracion
 ;  - EJECUTAR COMO ADMINISTRADOR
+;  - CRE debe estar abierto
 ; ============================================================
 #NoEnv
 #SingleInstance Force
@@ -22,20 +25,38 @@ SetTitleMatchMode, 2
 API_BASE := "https://pos-app-taupe.vercel.app"
 
 global busy              := false
-global lastScanField     := ""
 global capturedOrderNum  := ""
+global lastScanField     := ""
 global lastProcessed     := ""
 global lastProcessedTime := 0
 
-TrayTip, Bridge CRE v10, Activo. Escanea el ticket del cliente., 5
+TrayTip, Bridge CRE v11, Activo - Escanea el ticket del cliente., 5
 
-SetTimer, ReadScanField, 30
-SetTimer, WatchDialog,   150
+; Leer el campo de escaneo de CRE cada 25ms
+SetTimer, ReadScanField, 25
+; Vigilar el dialogo "Item Not Found" cada 100ms
+SetTimer, WatchDialog,   100
 return
 
-; ── Leer campo de escaneo de CRE ────────────────────────────────
+; ── Hotkey manual: Ctrl+Shift+R = reprocesar ultima orden ────────────────────
+^+r::
+  if busy
+  {
+    TrayTip, Bridge CRE, Ocupado procesando..., 2
+    return
+  }
+  if (lastProcessed = "")
+  {
+    TrayTip, Bridge CRE, No hay orden reciente para reprocesar., 3
+    return
+  }
+  orderNum := lastProcessed
+  lastProcessedTime := 0   ; resetear anti-duplicado para permitir reproceso
+  GoSub, ProcesarOrden
+return
+
+; ── Leer campo de escaneo de CRE ─────────────────────────────────────────────
 ReadScanField:
-  global busy, lastScanField, capturedOrderNum
   if busy
     return
   SetTitleMatchMode, 2
@@ -43,74 +64,105 @@ ReadScanField:
   {
     ControlGetText, fv, Edit1, Cash Register Express
     fv := Trim(fv)
-    if (fv != "" && fv != lastScanField)
+    if (fv = "" || fv = lastScanField)
+      return
+    lastScanField := fv
+    ; Solo capturar numeros cortos (numeros de orden)
+    if fv is integer
     {
-      lastScanField := fv
-      if fv is integer
-      {
-        if (StrLen(fv) <= 6)
-          capturedOrderNum := fv
-      }
+      if (StrLen(fv) >= 1 && StrLen(fv) <= 6)
+        capturedOrderNum := fv
     }
   }
   return
 
-; ── Detectar dialogo "Item Not Found" ───────────────────────────
+; ── Detectar y manejar dialogo "Item Not Found" ───────────────────────────────
 WatchDialog:
-  global busy, capturedOrderNum, lastScanField
-  global lastProcessed, lastProcessedTime
-  SetTitleMatchMode, 2   ; CRITICO: los timers usan modo 1 por defecto
+  SetTitleMatchMode, 2
   if busy
     return
 
   IfWinExist, Item Not Found
   {
-    busy := true
-    SetTimer, ReadScanField, Off
-
+    ; Tomar el numero capturado y limpiar estado
     orderNum := capturedOrderNum
     capturedOrderNum := ""
     lastScanField    := ""
 
+    ; Validar que sea un numero de orden
     if orderNum is not integer
     {
+      ; No era una orden, solo cerrar el dialogo
       WinActivate, Item Not Found
-      Sleep, 150
+      Sleep, 80
       Send {Enter}
-      SetTimer, ReadScanField, 30
-      busy := false
       return
     }
 
+    ; Anti-duplicado: no reprocesar la misma orden en los proximos 30 segundos
     now := A_TickCount
-    if (orderNum = lastProcessed && (now - lastProcessedTime) < 20000)
+    if (orderNum = lastProcessed && (now - lastProcessedTime) < 30000)
     {
       WinActivate, Item Not Found
-      Sleep, 150
+      Sleep, 80
       Send {Enter}
-      SetTimer, ReadScanField, 30
-      busy := false
+      TrayTip, Bridge CRE, Orden #%orderNum% ya fue procesada., 3
       return
     }
+
+    ; Marcar como ocupado ANTES de cualquier Sleep para evitar re-entrada
+    busy := true
+    SetTimer, ReadScanField, Off
 
     lastProcessed     := orderNum
     lastProcessedTime := A_TickCount
 
+    ; Cerrar el dialogo "Item Not Found"
     WinActivate, Item Not Found
-    Sleep, 200
+    Sleep, 80
     Send {Enter}
-    Sleep, 500
+    Sleep, 300
 
     GoSub, ProcesarOrden
   }
   return
 
-; ── Consultar kiosco y escribir PLU + precio en CRE ─────────────
+; ── Tipear un PLU en CRE y manejar posible "Item Not Found" ─────────────────
+; Parametro global: g_plu
+TypePLU:
+  SetTitleMatchMode, 2
+  IfWinNotExist, Cash Register Express
+    return
+
+  WinActivate, Cash Register Express
+  Sleep, 150
+
+  SendInput % g_plu
+  Sleep, 80
+  SendInput {Enter}
+
+  ; Esperar hasta 600ms a que CRE procese
+  Loop, 6
+  {
+    Sleep, 100
+    ; Si aparece "Item Not Found", descartarlo silenciosamente y continuar
+    IfWinExist, Item Not Found
+    {
+      WinActivate, Item Not Found
+      Sleep, 60
+      Send {Enter}
+      Sleep, 120
+      break
+    }
+  }
+  return
+
+; ── Consultar kiosco y escribir PLUs en CRE ──────────────────────────────────
 ProcesarOrden:
   SetTitleMatchMode, 2
   url := API_BASE . "/api/orders/pos/" . orderNum
-  whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
 
+  whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
   try
   {
     whr.Open("GET", url, false)
@@ -119,7 +171,7 @@ ProcesarOrden:
   catch e
   {
     TrayTip, Bridge CRE, Sin conexion a internet., 4
-    SetTimer, ReadScanField, 30
+    SetTimer, ReadScanField, 25
     busy := false
     return
   }
@@ -129,115 +181,126 @@ ProcesarOrden:
 
   if (httpStatus = 404)
   {
-    TrayTip, Bridge CRE, Orden #%orderNum% no encontrada., 5
-    SetTimer, ReadScanField, 30
+    TrayTip, Bridge CRE, Orden #%orderNum% no encontrada en el kiosco., 5
+    SetTimer, ReadScanField, 25
     busy := false
     return
   }
 
   if (httpStatus != 200)
   {
-    TrayTip, Bridge CRE, Error servidor: %httpStatus%, 4
-    SetTimer, ReadScanField, 30
+    TrayTip, Bridge CRE, Error del servidor: %httpStatus%, 4
+    SetTimer, ReadScanField, 25
     busy := false
     return
   }
 
-  json := httpBody
-
-  RegExMatch(json, """kioskPlu"":""([^""]*?)""", pluM)
-  RegExMatch(json, """total"":([\d.]+)", totalM)
-
-  kioskPlu   := pluM1
-  orderTotal := totalM1 + 0
-
-  if (kioskPlu = "")
-  {
-    TrayTip, Bridge CRE, Configura el PLU KIOSKO en Admin > Configuracion., 6
-    SetTimer, ReadScanField, 30
-    busy := false
-    return
-  }
-
-  ; Cerrar dialogo pendiente
-  IfWinExist, Item Not Found
-  {
-    WinActivate, Item Not Found
-    Sleep, 150
-    Send {Enter}
-    Sleep, 300
-  }
-
+  ; Verificar que CRE esta abierto
   IfWinNotExist, Cash Register Express
   {
     TrayTip, Bridge CRE, No se encontro Cash Register Express., 4
-    SetTimer, ReadScanField, 30
+    SetTimer, ReadScanField, 25
     busy := false
     return
   }
 
-  ; ── Paso 1: tipear el PLU del KIOSKO ────────────────────────────
-  WinActivate, Cash Register Express
-  Sleep, 400
-  SendInput % kioskPlu
-  Sleep, 100
-  SendInput {Enter}
-  Sleep, 800
+  ; ── Parsear JSON con items y sus PLUs ──────────────────────────────────────
+  ;
+  ; Estructura esperada:
+  ;   { "items": [ { "name":"...", "qty":2, "plus":["8MOD","68MOD"] }, ... ] }
+  ;
+  ; Extraemos cada bloque de item y su lista de PLUs.
+  ;
 
-  ; ── Paso 2: CRE pide el precio (Prompt Price) → escribir total ──
-  ; Esperar hasta 3 segundos a que aparezca el dialogo de precio
-  priceDialogFound := false
-  Loop, 15
+  json       := httpBody
+  itemsAdded := 0
+
+  ; Posicion de busqueda dentro del JSON
+  pos        := 1
+
+  ; Iterar cada objeto de item en el array "items"
+  Loop
   {
-    ; CRE muestra un dialogo "Enter Price" o similar
-    IfWinExist, ahk_class #32770
-    {
-      priceDialogFound := true
+    ; Encontrar el proximo bloque { ... } dentro del array
+    startBrace := InStr(json, "{", false, pos)
+    if (startBrace = 0)
       break
-    }
-    ; Tambien puede ser que ya se haya agregado con otro dialogo
-    IfWinExist, Item Not Found
+
+    ; Encontrar el cierre correspondiente (nivel 1)
+    depth    := 0
+    endBrace := 0
+    i        := startBrace
+    Loop, % StrLen(json) - startBrace + 1
     {
-      ; El PLU no fue reconocido
-      WinActivate, Item Not Found
-      Sleep, 100
-      Send {Enter}
-      Sleep, 200
-      TrayTip, Bridge CRE, PLU %kioskPlu% no reconocido en CRE.`nVerifica el PLU en Admin del kiosco., 7
-      SetTimer, ReadScanField, 30
-      busy := false
-      return
+      ch := SubStr(json, i, 1)
+      if (ch = "{")
+        depth++
+      else if (ch = "}")
+      {
+        depth--
+        if (depth = 0)
+        {
+          endBrace := i
+          break
+        }
+      }
+      i++
     }
-    Sleep, 200
+
+    if (endBrace = 0)
+      break
+
+    itemJson := SubStr(json, startBrace, endBrace - startBrace + 1)
+    pos      := endBrace + 1
+
+    ; Extraer qty
+    RegExMatch(itemJson, """qty""\s*:\s*(\d+)", qtyM)
+    itemQty := (qtyM1 + 0)
+    if (itemQty < 1)
+      itemQty := 1
+
+    ; Extraer el array "plus": ["PLU1","PLU2",...]
+    RegExMatch(itemJson, """plus""\s*:\s*\[([^\]]*)\]", plusM)
+    plusRaw := plusM1
+
+    ; Construir lista de PLUs desde el string extraido
+    plusList := []
+    pluPos   := 1
+    Loop
+    {
+      RegExMatch(plusRaw, """([^""]+)""", pM, pluPos)
+      if (pM = "")
+        break
+      plusList.Push(pM1)
+      pluPos += StrLen(pM)
+    }
+
+    if (plusList.Length() = 0)
+      continue
+
+    ; ── Tipear los PLUs: qty veces cada combinacion de PLUs ────────────────
+    Loop, % itemQty
+    {
+      for k, plu in plusList
+      {
+        g_plu := plu
+        GoSub, TypePLU
+        Sleep, 80
+      }
+      ; Pausa pequeña entre unidades del mismo item
+      Sleep, 200
+    }
+
+    itemsAdded++
   }
 
-  if priceDialogFound
-  {
-    WinActivate, ahk_class #32770
-    Sleep, 200
-    SendInput % orderTotal
-    Sleep, 100
-    SendInput {Enter}
-    Sleep, 500
-  }
-  else
-  {
-    ; Si no hubo dialogo de precio, intentar con PRICE CHANGE (Ctrl+L)
-    WinActivate, Cash Register Express
-    Sleep, 300
-    Send ^l
-    Sleep, 600
-    SendInput % orderTotal
-    Sleep, 100
-    SendInput {Enter}
-    Sleep, 500
-  }
+  ; Mostrar resumen discreto
+  TrayTip, Listo, Orden #%orderNum% cargada en CRE (%itemsAdded% items)., 4
 
-  TrayTip, Listo, Orden #%orderNum% - $%orderTotal% en CRE., 4
-
-  Sleep, 2000
+  ; Limpiar estado
+  Sleep, 1500
   lastScanField    := ""
   capturedOrderNum := ""
-  SetTimer, ReadScanField, 30
+  SetTimer, ReadScanField, 25
   busy := false
   return

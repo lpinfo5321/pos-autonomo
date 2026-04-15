@@ -12,6 +12,7 @@ interface Modifier {
   price: number;
   calories?: number | null;
   image?: string | null;
+  posCode?: string | null;
   active: boolean;
 }
 
@@ -153,7 +154,7 @@ export default function ProductModal({ item, onClose }: Props) {
     for (const group of item.modifierGroups) {
       for (const modId of selectedModifiers[group.id] || []) {
         const mod = group.modifiers.find((m) => m.id === modId);
-        if (mod) result.push({ id: mod.id, name: mod.name, price: mod.price });
+        if (mod) result.push({ id: mod.id, name: mod.name, price: mod.price, posCode: mod.posCode ?? undefined });
       }
     }
     return result;

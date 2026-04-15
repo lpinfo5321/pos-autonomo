@@ -4,6 +4,7 @@ export interface CartModifier {
   id: string;
   name: string;
   price: number;
+  posCode?: string;
 }
 
 export interface CartItem {
